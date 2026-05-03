@@ -1,0 +1,59 @@
+---
+description: cocotb tests and helpers for tiny-gpu
+globs: test/**/*.py
+alwaysApply: false
+---
+
+# tiny-gpu — cocotb tests and helpers
+
+Match `test/test_matadd.py`, `test/test_matmul.py`, and helpers under `test/helpers/`.
+
+## Test structure
+
+- Use `@cocotb.test()` and `async def test_<name>(dut):`.
+- Import `setup` from `test.helpers.setup`, `Memory` from `test.helpers.memory`, `format_cycle` from `test.helpers.format`, `logger` from `test.helpers.logger` (same relative import style as existing tests: `from .helpers...` when inside `test/`).
+
+## Setup (`helpers/setup.py`)
+
+- Call `await setup(dut, program_memory, program, data_memory, data, threads)` which:
+  - Starts a `Clock` on `dut.clk` (25 µs period in existing tests)
+  - Applies synchronous reset (`reset` high one cycle, then low)
+  - Loads program and data via `Memory.load`
+  - Writes device control / thread count via `device_control_*` then pulses `start`
+
+## Main simulation loop
+
+- Typical pattern: while `dut.done != 1`:
+  - `program_memory.run()` and `data_memory.run()` (bus-functional model before sampling DUT outputs)
+  - `await cocotb.triggers.ReadOnly()` then optional `format_cycle(dut, cycles)` for debug
+  - `await RisingEdge(dut.clk)` and increment cycle count
+- Use `logger.info` for high-level messages (e.g. cycle count at end).
+
+## Memory model (`helpers/memory.py`)
+
+- Construct with `dut`, `addr_bits`, `data_bits`, `channels`, and `name` matching DUT port prefix (`"program"` → `program_mem_*`, `"data"` → `data_mem_*`).
+- Program memory: `channels=1`. Data memory: `channels=4` to match the GPU data interface.
+- `run()` implements read/write handshake behavior; keep behavior consistent if DUT port widths or channel counts change.
+
+## Logging (`helpers/logger.py`)
+
+- `logger` writes to timestamped files under `test/logs/`.
+- Use `logger.info` for summaries; `format_cycle` uses `logger.debug` — keep verbose tracing behind that path.
+
+## Instruction listings in tests
+
+- Encode instructions as binary literals with inline `#` assembly comments (mnemonic and operands), consistent with matadd/matmul.
+
+## Accessing the DUT
+
+- Top is `gpu`; traverse `dut.cores`, `core.core_instance`, `core.core_instance.threads` for per-thread signals — see `format.py` for examples.
+- If hierarchy strings change in RTL, update `format_cycle` and any test that reaches into generated instances.
+
+## Assertions and new tests
+
+- Assert final data memory contents and/or completion via `dut.done`.
+- For branch-divergence features: add assertions that depend on **per-thread** behavior (different addresses or values per thread), not only whole-kernel results that could pass under a unified PC model.
+
+## Makefile integration
+
+- Add `make test_<name>` support via the existing `test_%` rule: place tests at `test/test_<name>.py` with `MODULE=test.test_<name>` expectation.

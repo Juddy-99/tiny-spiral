@@ -1,0 +1,49 @@
+---
+description: tiny-gpu toolchain, verification, DUT hierarchy, ISA consistency, branch-divergence context
+alwaysApply: true
+---
+
+# tiny-gpu — project invariants
+
+## Source of truth
+
+- Author RTL only under `src/**/*.sv`. Do not hand-edit merged Verilog in `build/` (e.g. `build/gpu.v`); it is produced by `sv2v` and Makefile concatenation.
+
+## Build and simulation
+
+- After non-trivial RTL changes, run `make test_matadd` and `make test_matmul` from the repo root.
+- Flow: `make compile` → `iverilog -o build/sim.vvp -s gpu -g2012 build/gpu.v` → `MODULE=test.test_<name> vvp ... build/sim.vvp`.
+- New cocotb tests: `test/test_<name>.py` with `@cocotb.test()`, invoked via `make test_<name>` (Makefile pattern `test_%`).
+
+## Toolchain (sv2v + Icarus)
+
+- SystemVerilog sources are converted with **sv2v** for simulation with **Icarus Verilog** and cocotb.
+- Prefer constructs already used in the codebase: `always @(posedge clk)`, `reg`/`wire`, `generate`/`genvar`, unpacked arrays, `localparam`.
+- Do not introduce packages, `logic` ports, interfaces, classes, or other heavy SV-only features without confirming **sv2v** supports them and simulation still passes.
+- Physical/OpenLane flow targets Verilog-2005 in places; `gpu.sv` documents slicing/workaround requirements — avoid changes that break generate-block signal routing without checking downstream flow comments there.
+
+## cocotb DUT hierarchy (do not break casually)
+
+- Top module for simulation is **`gpu`** (`iverilog -s gpu`).
+- Hierarchy path used by tests and `test/helpers/format.py`:
+  - `dut.cores` → `core.core_instance` → `core.core_instance.threads` → per-thread `alu_instance`, `lsu_instance`, `register_instance`, `pc_instance`, etc.
+- **Do not rename** generate block labels `cores` / `threads` or instance names like `core_instance` without updating **all** cocotb references and `format_cycle` in `test/helpers/format.py`.
+
+## ISA and cross-file consistency
+
+- Instruction encoding is documented in `README.md` and mirrored in:
+  - `src/decoder.sv` (opcode `localparam`s and decode logic)
+  - `test/helpers/format.py` (`format_instruction`, related helpers)
+  - Tests that embed binary instruction words (`test/test_*.py`)
+- Any ISA or encoding change must update **decoder + format.py + affected tests + README** in the same change set.
+
+## Branch divergence (design context)
+
+- Each thread has a `pc` submodule producing `next_pc[i]`, but `scheduler.sv` currently commits a **single** `current_pc` (see TODO in UPDATE state). `fetcher.sv` fetches using that one PC.
+- Implementing divergence is a cross-cutting change: expect edits to **scheduler**, **fetcher**, **core** wiring, and possibly top-level GPU plumbing — not `pc.sv` alone.
+- Document the chosen model (e.g. warp mask, active lane bitmap, serialized divergence handling) in module header comments where behavior changes.
+- Add cocotb tests that **provably diverge** (threads branch to different PCs); existing matadd/matmul regressions are necessary but not sufficient.
+
+## Scope discipline
+
+- Match existing style and scope: no drive-by refactors or unrelated files. Parameter/top-level width changes require consistent updates through `gpu.sv`, Makefile compile rules, and tests.

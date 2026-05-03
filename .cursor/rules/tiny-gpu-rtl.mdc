@@ -1,0 +1,58 @@
+---
+description: SystemVerilog RTL style and patterns for tiny-gpu src/
+globs: src/**/*.sv
+alwaysApply: false
+---
+
+# tiny-gpu — SystemVerilog RTL conventions
+
+Follow existing modules (`core.sv`, `scheduler.sv`, `decoder.sv`, `pc.sv`, `gpu.sv`) as the norm.
+
+## File prologue
+
+Every file starts with:
+
+```systemverilog
+`default_nettype none
+`timescale 1ns/1ns
+```
+
+## Module documentation
+
+- First line after prologue: `// MODULE TITLE IN CAPS`
+- Then explain behavior and assumptions with lines beginning `// >` (bullet style), matching README tone where relevant.
+
+## Naming
+
+- **Modules**: lowercase with underscores if needed (`decoder`, `scheduler`).
+- **Parameters**: suffix address/data widths with `_BITS`; reuse names `THREADS_PER_BLOCK`, `DATA_MEM_*`, `PROGRAM_MEM_*` consistently with `gpu.sv` / `core.sv`.
+- **Instances**: suffix `_instance` (e.g. `decoder decoder_instance`, `scheduler_instance`).
+- **Generate blocks**: use `genvar i` (or `j` nested); name blocks `begin : cores` or `begin : threads` — these names are part of the simulation hierarchy.
+
+## Ports and types
+
+- Match the project mix: `input wire clk`, `input wire reset`; sequential outputs commonly `output reg`.
+- Keep port lists aligned where the file already uses column alignment.
+
+## Sequential logic
+
+- Use `always @(posedge clk)` for synchronous logic.
+- On `reset`, initialize control registers and important datapath registers to known values (see `scheduler`, `decoder`, `pc`).
+- Use `enable` inputs to gate inactive threads when `i < thread_count` in `core`’s generate loop — preserve that pattern when adding per-thread logic.
+
+## FSMs and opcodes
+
+- Use `localparam` for multibit state encodings and decoder opcode names where the file already does.
+- When comparing to `core_state` or similar, either use the same numeric literal style as the rest of that file (e.g. `3'b010`) **or** refactor the whole module to symbolic comparisons — do not mix styles in one module.
+
+## Comments inside always blocks
+
+- Brief notes at state transitions explaining why (e.g. “Decode is synchronous so we move on after one cycle”).
+- For architectural changes (especially branch divergence), add short, accurate comments at the decision point — avoid long essays unless the control flow is non-obvious.
+
+## AI guardrails
+
+- Do not reformat or rename signals in unrelated modules.
+- Do not widen parameters without updating `gpu.sv`, Makefile/`compile` targets, and cocotb tests.
+- Preserve per-thread `enable` semantics for partial blocks (`thread_count` less than `THREADS_PER_BLOCK`).
+- Avoid new dependencies on SV features that may not survive **sv2v**; when in doubt, mirror a construct already present in `src/`.
