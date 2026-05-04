@@ -11,8 +11,12 @@
 // 6. UPDATE - Update register values (including NZP register) and program counter
 // > Each core has it's own scheduler where multiple threads can be processed with
 //   the same control flow at once.
-// > Technically, different instructions can branch to different PCs, requiring "branch divergence." In
-//   this minimal implementation, we assume no branch divergence (naive approach for simplicity)
+// > Branch divergence is now handled by the divergence unit (src/divergence.sv),
+//   which owns current_pc, the per-warp active mask, and the SIMT reconvergence
+//   stack. The scheduler reads block_done from divergence to decide when to
+//   transition into the DONE state instead of keying off decoded_ret directly --
+//   per-thread RET means the block is only done when divergence has unwound
+//   every active thread and stack entry.
 module scheduler #(
     parameter THREADS_PER_BLOCK = 4,
 ) (
@@ -23,15 +27,14 @@ module scheduler #(
     // Control Signals
     input reg decoded_mem_read_enable,
     input reg decoded_mem_write_enable,
-    input reg decoded_ret,
 
     // Memory Access State
     input reg [2:0] fetcher_state,
     input reg [1:0] lsu_state [THREADS_PER_BLOCK-1:0],
 
-    // Current & Next PC
-    output reg [7:0] current_pc,
-    input reg [7:0] next_pc [THREADS_PER_BLOCK-1:0],
+    // Divergence unit signals when the whole block has finished (all threads RETed
+    // and the reconvergence stack is empty). Drives the UPDATE -> DONE transition.
+    input wire block_done,
 
     // Execution State
     output reg [2:0] core_state,
@@ -48,7 +51,6 @@ module scheduler #(
     
     always @(posedge clk) begin 
         if (reset) begin
-            current_pc <= 0;
             core_state <= IDLE;
             done <= 0;
         end else begin 
@@ -95,15 +97,12 @@ module scheduler #(
                     core_state <= UPDATE;
                 end
                 UPDATE: begin 
-                    if (decoded_ret) begin 
-                        // If we reach a RET instruction, this block is done executing
+                    // Divergence unit drives current_pc / active_mask / stack on this
+                    // same posedge. We only need to decide whether the block is done.
+                    if (block_done) begin 
                         done <= 1;
                         core_state <= DONE;
                     end else begin 
-                        // TODO: Branch divergence. For now assume all next_pc converge
-                        current_pc <= next_pc[THREADS_PER_BLOCK-1];
-
-                        // Update is synchronous so we move on after one cycle
                         core_state <= FETCH;
                     end
                 end

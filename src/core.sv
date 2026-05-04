@@ -45,13 +45,24 @@ module core #(
     reg [15:0] instruction;
 
     // Intermediate Signals
-    reg [7:0] current_pc;
+    wire [7:0] current_pc;
     wire [7:0] next_pc[THREADS_PER_BLOCK-1:0];
     reg [7:0] rs[THREADS_PER_BLOCK-1:0];
     reg [7:0] rt[THREADS_PER_BLOCK-1:0];
     reg [1:0] lsu_state[THREADS_PER_BLOCK-1:0];
     reg [7:0] lsu_out[THREADS_PER_BLOCK-1:0];
     wire [7:0] alu_out[THREADS_PER_BLOCK-1:0];
+
+    // Divergence-unit signals: per-warp active mask, sticky RET mask, block done.
+    // alive_mask gates "this slot has a real thread"; active_mask gates "this thread
+    // is currently executing this cycle." Per-thread enables are the AND of the two,
+    // which lets the divergence unit silently disable threads without clobbering
+    // their stored next_pc / NZP / register state during the deferred period.
+    wire [THREADS_PER_BLOCK-1:0] alive_mask;
+    wire [THREADS_PER_BLOCK-1:0] active_mask;
+    wire [THREADS_PER_BLOCK-1:0] done_mask;
+    wire [THREADS_PER_BLOCK-1:0] thread_active;
+    wire block_done;
     
     // Decoded Instruction Signals
     reg [3:0] decoded_rd_address;
@@ -121,12 +132,45 @@ module core #(
         .core_state(core_state),
         .decoded_mem_read_enable(decoded_mem_read_enable),
         .decoded_mem_write_enable(decoded_mem_write_enable),
-        .decoded_ret(decoded_ret),
         .lsu_state(lsu_state),
-        .current_pc(current_pc),
-        .next_pc(next_pc),
+        .block_done(block_done),
         .done(done)
     );
+
+    // Divergence unit owns current_pc, active_mask, done_mask, and the SIMT
+    // reconvergence stack. See src/divergence.sv for the algorithm.
+    divergence #(
+        .THREADS_PER_BLOCK(THREADS_PER_BLOCK),
+        .PROGRAM_MEM_ADDR_BITS(PROGRAM_MEM_ADDR_BITS),
+        .STACK_DEPTH(THREADS_PER_BLOCK)
+    ) divergence_instance (
+        .clk(clk),
+        .reset(reset),
+        .alive_mask(alive_mask),
+        .core_state(core_state),
+        .next_pc(next_pc),
+        .decoded_ret(decoded_ret),
+        .current_pc(current_pc),
+        .active_mask(active_mask),
+        .done_mask(done_mask),
+        .block_done(block_done),
+        .stack_ptr_dbg(),
+        .stack_top_pc_dbg(),
+        .stack_top_mask_dbg()
+    );
+
+    // Per-thread enables. `i < thread_count` disables slots beyond the block's
+    // alive thread count; `active_mask[i]` additionally disables threads that
+    // are currently masked off by divergence (sitting on the reconvergence stack
+    // or already RETed). thread_active gates the per-thread submodule enables
+    // below so a deferred thread's pc / register / lsu state is held intact.
+    genvar k;
+    generate
+        for (k = 0; k < THREADS_PER_BLOCK; k = k + 1) begin : alive_gen
+            assign alive_mask[k]    = (k < thread_count);
+            assign thread_active[k] = alive_mask[k] && active_mask[k];
+        end
+    endgenerate
 
     // Dedicated ALU, LSU, registers, & PC unit for each thread this core has capacity for
     genvar i;
@@ -136,7 +180,7 @@ module core #(
             alu alu_instance (
                 .clk(clk),
                 .reset(reset),
-                .enable(i < thread_count),
+                .enable(thread_active[i]),
                 .core_state(core_state),
                 .decoded_alu_arithmetic_mux(decoded_alu_arithmetic_mux),
                 .decoded_alu_output_mux(decoded_alu_output_mux),
@@ -149,7 +193,7 @@ module core #(
             lsu lsu_instance (
                 .clk(clk),
                 .reset(reset),
-                .enable(i < thread_count),
+                .enable(thread_active[i]),
                 .core_state(core_state),
                 .decoded_mem_read_enable(decoded_mem_read_enable),
                 .decoded_mem_write_enable(decoded_mem_write_enable),
@@ -175,7 +219,7 @@ module core #(
             ) register_instance (
                 .clk(clk),
                 .reset(reset),
-                .enable(i < thread_count),
+                .enable(thread_active[i]),
                 .block_id(block_id),
                 .core_state(core_state),
                 .decoded_reg_write_enable(decoded_reg_write_enable),
@@ -197,7 +241,7 @@ module core #(
             ) pc_instance (
                 .clk(clk),
                 .reset(reset),
-                .enable(i < thread_count),
+                .enable(thread_active[i]),
                 .core_state(core_state),
                 .decoded_nzp(decoded_nzp),
                 .decoded_immediate(decoded_immediate),
