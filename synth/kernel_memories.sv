@@ -11,8 +11,8 @@
 // files required, which keeps the LabsLand upload set self-contained.
 //
 // Port shape MATCHES synth/sim_program_rom.sv and synth/sim_data_ram.sv (minus
-// the test-only init backdoor). The synth top can swap between sim/synth RAMs
-// by changing module names only.
+// the test-only init backdoor). data_ram adds dbg_addr/dbg_dout for FPGA HEX
+// readback (synthesis tools cannot hierarchically tap internal mem[]).
 
 module program_rom #(
     parameter ADDR_BITS = 8,
@@ -303,7 +303,9 @@ module data_ram #(
     input wire [ADDR_BITS-1:0] addr [NUM_CHANNELS-1:0],
     input wire [NUM_CHANNELS-1:0] we,
     input wire [DATA_BITS-1:0] din [NUM_CHANNELS-1:0],
-    output wire [DATA_BITS-1:0] dout [NUM_CHANNELS-1:0]
+    output wire [DATA_BITS-1:0] dout [NUM_CHANNELS-1:0],
+    input wire [ADDR_BITS-1:0] dbg_addr,
+    output wire [DATA_BITS-1:0] dbg_dout
 );
     reg [DATA_BITS-1:0] mem [0:(1<<ADDR_BITS)-1];
 
@@ -579,4 +581,6 @@ module data_ram #(
             assign dout[g] = mem[addr[g]];
         end
     endgenerate
+
+    assign dbg_dout = mem[dbg_addr];
 endmodule

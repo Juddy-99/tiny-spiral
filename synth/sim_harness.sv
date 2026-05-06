@@ -51,6 +51,12 @@ module sim_harness #(
     wire [DATA_MEM_DATA_BITS-1:0] data_mem_write_data [DATA_MEM_NUM_CHANNELS-1:0];
     wire [DATA_MEM_NUM_CHANNELS-1:0] data_mem_write_ready;
 
+    localparam DBG_STACK_W = $clog2(THREADS_PER_BLOCK + 1);
+    wire [PROGRAM_MEM_ADDR_BITS-1:0] dbg_current_pc_nc;
+    wire [THREADS_PER_BLOCK-1:0] dbg_active_mask_nc;
+    wire [THREADS_PER_BLOCK-1:0] dbg_done_mask_nc;
+    wire [DBG_STACK_W-1:0] dbg_stack_ptr_nc;
+
     gpu #(
         .DATA_MEM_ADDR_BITS(DATA_MEM_ADDR_BITS),
         .DATA_MEM_DATA_BITS(DATA_MEM_DATA_BITS),
@@ -78,7 +84,12 @@ module sim_harness #(
         .data_mem_write_valid(data_mem_write_valid),
         .data_mem_write_address(data_mem_write_address),
         .data_mem_write_data(data_mem_write_data),
-        .data_mem_write_ready(data_mem_write_ready)
+        .data_mem_write_ready(data_mem_write_ready),
+
+        .dbg_current_pc(dbg_current_pc_nc),
+        .dbg_active_mask(dbg_active_mask_nc),
+        .dbg_done_mask(dbg_done_mask_nc),
+        .dbg_stack_ptr(dbg_stack_ptr_nc)
     );
 
     // Program memory: bridges + ROM

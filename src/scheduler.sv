@@ -18,7 +18,7 @@
 //   per-thread RET means the block is only done when divergence has unwound
 //   every active thread and stack entry.
 module scheduler #(
-    parameter THREADS_PER_BLOCK = 4,
+    parameter THREADS_PER_BLOCK = 4
 ) (
     input wire clk,
     input wire reset,

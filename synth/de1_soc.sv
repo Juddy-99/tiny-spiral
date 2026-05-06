@@ -112,6 +112,11 @@ module de1_soc #(
     localparam PROGRAM_MEM_NUM_CHANNELS = 1;
 
     wire gpu_done;
+    wire [7:0] cur_pc;
+    wire [THREADS_PER_BLOCK-1:0] active_mask;
+    wire [THREADS_PER_BLOCK-1:0] done_mask;
+    localparam DBG_STACK_W = $clog2(THREADS_PER_BLOCK + 1);
+    wire [DBG_STACK_W-1:0] stack_ptr;
 
     wire [PROGRAM_MEM_NUM_CHANNELS-1:0] prog_mem_read_valid;
     wire [7:0] prog_mem_read_address [PROGRAM_MEM_NUM_CHANNELS-1:0];
@@ -154,7 +159,12 @@ module de1_soc #(
         .data_mem_write_valid(data_mem_write_valid),
         .data_mem_write_address(data_mem_write_address),
         .data_mem_write_data(data_mem_write_data),
-        .data_mem_write_ready(data_mem_write_ready)
+        .data_mem_write_ready(data_mem_write_ready),
+
+        .dbg_current_pc(cur_pc),
+        .dbg_active_mask(active_mask),
+        .dbg_done_mask(done_mask),
+        .dbg_stack_ptr(stack_ptr)
     );
 
     // ---- Program memory: bridge + ROM ----
@@ -232,6 +242,11 @@ module de1_soc #(
         end
     endgenerate
 
+    // HEX data readback: SW[7:4] selects a 16-byte region base (async dbg port on
+    // data_ram — Quartus cannot hierarchically reference inferred mem[]).
+    wire [7:0] readback_addr = {SW[7:4], 4'b0000};
+    wire [7:0] readback_data;
+
     data_ram #(
         .ADDR_BITS(8),
         .DATA_BITS(8),
@@ -241,29 +256,14 @@ module de1_soc #(
         .addr(data_ram_addr),
         .we(data_ram_we),
         .din(data_ram_din),
-        .dout(data_ram_dout)
+        .dout(data_ram_dout),
+        .dbg_addr(readback_addr),
+        .dbg_dout(readback_data)
     );
 
     // ---- HEX / LED panel ----
-    // current_pc, active_mask, done_mask, stack_ptr come from divergence_instance
-    // inside core 0. Use hierarchical references rather than plumbing them out.
-    wire [7:0] cur_pc      = gpu_instance.cores[0].core_instance.divergence_instance.current_pc;
-    wire [3:0] active_mask = gpu_instance.cores[0].core_instance.divergence_instance.active_mask;
-    wire [3:0] done_mask   = gpu_instance.cores[0].core_instance.divergence_instance.done_mask;
-    wire [2:0] stack_ptr   = gpu_instance.cores[0].core_instance.divergence_instance.stack_ptr;
-
-    // Data-mem readback uses a free async-read port. Channel 0 of data_ram_dout
-    // would normally be for the GPU; we tap into the underlying mem array via
-    // hierarchical reference instead so the readback doesn't fight the GPU for a
-    // channel.
-    //
-    // SW[7:4] is treated as a 4-bit block index, so SW[7:4]=1 reads byte 16
-    // (where the if/else kernel's equal-path thread 0 stores 100), SW[7:4]=2
-    // reads byte 32 (start of the not-equal-path block), etc. Lets us scrub
-    // through 16 distinct 16-byte regions of the 256-byte data_ram with the
-    // four upper switches.
-    wire [7:0] readback_addr = {SW[7:4], 4'b0000};
-    wire [7:0] readback_data = data_ram_instance.mem[readback_addr];
+    // Divergence debug taps are exported as explicit gpu ports (Quartus cannot
+    // reliably elaborate deep hierarchical refs into generated cores).
 
     seg7 hex5_drv (.nibble(cur_pc[7:4]),     .segs(HEX5));
     seg7 hex4_drv (.nibble(cur_pc[3:0]),     .segs(HEX4));

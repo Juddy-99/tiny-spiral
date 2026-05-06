@@ -10,7 +10,8 @@ module core #(
     parameter DATA_MEM_DATA_BITS = 8,
     parameter PROGRAM_MEM_ADDR_BITS = 8,
     parameter PROGRAM_MEM_DATA_BITS = 16,
-    parameter THREADS_PER_BLOCK = 4
+    parameter THREADS_PER_BLOCK = 4,
+    parameter STACK_DBG_W = $clog2(THREADS_PER_BLOCK + 1)
 ) (
     input wire clk,
     input wire reset,
@@ -37,7 +38,12 @@ module core #(
     output reg [THREADS_PER_BLOCK-1:0] data_mem_write_valid,
     output reg [DATA_MEM_ADDR_BITS-1:0] data_mem_write_address [THREADS_PER_BLOCK-1:0],
     output reg [DATA_MEM_DATA_BITS-1:0] data_mem_write_data [THREADS_PER_BLOCK-1:0],
-    input reg [THREADS_PER_BLOCK-1:0] data_mem_write_ready
+    input reg [THREADS_PER_BLOCK-1:0] data_mem_write_ready,
+
+    output wire [PROGRAM_MEM_ADDR_BITS-1:0] dbg_current_pc,
+    output wire [THREADS_PER_BLOCK-1:0] dbg_active_mask,
+    output wire [THREADS_PER_BLOCK-1:0] dbg_done_mask,
+    output wire [STACK_DBG_W-1:0] dbg_stack_ptr
 );
     // State
     reg [2:0] core_state;
@@ -63,7 +69,9 @@ module core #(
     wire [THREADS_PER_BLOCK-1:0] done_mask;
     wire [THREADS_PER_BLOCK-1:0] thread_active;
     wire block_done;
-    
+
+    wire [STACK_DBG_W-1:0] stack_ptr_dbg_sig;
+
     // Decoded Instruction Signals
     reg [3:0] decoded_rd_address;
     reg [3:0] decoded_rs_address;
@@ -123,7 +131,7 @@ module core #(
 
     // Scheduler
     scheduler #(
-        .THREADS_PER_BLOCK(THREADS_PER_BLOCK),
+        .THREADS_PER_BLOCK(THREADS_PER_BLOCK)
     ) scheduler_instance (
         .clk(clk),
         .reset(reset),
@@ -154,10 +162,15 @@ module core #(
         .active_mask(active_mask),
         .done_mask(done_mask),
         .block_done(block_done),
-        .stack_ptr_dbg(),
+        .stack_ptr_dbg(stack_ptr_dbg_sig),
         .stack_top_pc_dbg(),
         .stack_top_mask_dbg()
     );
+
+    assign dbg_current_pc = current_pc;
+    assign dbg_active_mask = active_mask;
+    assign dbg_done_mask = done_mask;
+    assign dbg_stack_ptr = stack_ptr_dbg_sig;
 
     // Per-thread enables. `i < thread_count` disables slots beyond the block's
     // alive thread count; `active_mask[i]` additionally disables threads that
@@ -215,7 +228,7 @@ module core #(
             registers #(
                 .THREADS_PER_BLOCK(THREADS_PER_BLOCK),
                 .THREAD_ID(i),
-                .DATA_BITS(DATA_MEM_DATA_BITS),
+                .DATA_BITS(DATA_MEM_DATA_BITS)
             ) register_instance (
                 .clk(clk),
                 .reset(reset),
