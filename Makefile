@@ -1,13 +1,26 @@
-.PHONY: test compile compile_synth compile_synth_top synth_kernel test_mem_bridge test_synth_top
+.PHONY: test compile compile_synth compile_synth_top synth_kernel test_mem_bridge test_synth_top test_synth_debug
 
-export LIBPYTHON_LOC=$(shell cocotb-config --libpython)
+# Prefer repo .venv for cocotb (cocotb-config + VPI) without manually activating it.
+# Use an absolute path for $(shell ...) — exported PATH is not always visible to
+# GNU make's $(shell) on the same parse pass.
+VENV_BIN := $(abspath .venv/bin)
+ifeq ($(wildcard $(VENV_BIN)/cocotb-config),)
+COCOTB_CONFIG := cocotb-config
+else
+COCOTB_CONFIG := $(VENV_BIN)/cocotb-config
+export VIRTUAL_ENV := $(abspath .venv)
+export PATH := $(VENV_BIN):$(PATH)
+endif
+
+export LIBPYTHON_LOC := $(shell $(COCOTB_CONFIG) --libpython)
+COCOTB_PREFIX := $(shell $(COCOTB_CONFIG) --prefix)
 
 # Default cocotb test rule (top = gpu).
 # The explicit test_mem_bridge / test_synth_top rules below take precedence.
 test_%:
 	make compile
 	iverilog -o build/sim.vvp -s gpu -g2012 build/gpu.v
-	MODULE=test.test_$* vvp -M $$(cocotb-config --prefix)/cocotb/libs -m libcocotbvpi_icarus build/sim.vvp
+	MODULE=test.test_$* vvp -M $(COCOTB_PREFIX)/cocotb/libs -m libcocotbvpi_icarus build/sim.vvp
 
 compile:
 	make compile_alu
@@ -50,7 +63,7 @@ compile_synth_top:
 test_mem_bridge:
 	$(MAKE) compile_synth
 	iverilog -o build/sim.vvp -s sim_harness -g2012 build/synth.v
-	MODULE=test.test_mem_bridge vvp -M $$(cocotb-config --prefix)/cocotb/libs -m libcocotbvpi_icarus build/sim.vvp
+	MODULE=test.test_mem_bridge vvp -M $(COCOTB_PREFIX)/cocotb/libs -m libcocotbvpi_icarus build/sim.vvp
 
 # Synth-top smoke test: instantiate de1_soc with a fast SLOW_CLK_DIV so the
 # divider isn't 10M cycles per gpu_clk edge. Requires the if/else kernel image
@@ -59,7 +72,7 @@ test_synth_top:
 	$(MAKE) synth_kernel KERNEL=test_diverge_ifelse
 	$(MAKE) compile_synth_top
 	iverilog -Pde1_soc.SLOW_CLK_DIV=2 -o build/sim.vvp -s de1_soc -g2012 build/synth_top.v
-	MODULE=test.test_synth_top vvp -M $$(cocotb-config --prefix)/cocotb/libs -m libcocotbvpi_icarus build/sim.vvp
+	MODULE=test.test_synth_top vvp -M $(COCOTB_PREFIX)/cocotb/libs -m libcocotbvpi_icarus build/sim.vvp
 
 compile_%:
 	sv2v -w build/$*.v src/$*.sv
@@ -77,6 +90,7 @@ synth_kernel:
 show_%: %.vcd %.gtkw
 	gtkwave $^
 test_synth_debug:
+	$(MAKE) synth_kernel KERNEL=test_diverge_ifelse
 	$(MAKE) compile_synth_top
 	iverilog -Pde1_soc.SLOW_CLK_DIV=2 -o build/sim.vvp -s de1_soc -g2012 build/synth_top.v
-	MODULE=test.test_synth_debug vvp -M $$(cocotb-config --prefix)/cocotb/libs -m libcocotbvpi_icarus build/sim.vvp
+	MODULE=test.test_synth_debug vvp -M $(COCOTB_PREFIX)/cocotb/libs -m libcocotbvpi_icarus build/sim.vvp

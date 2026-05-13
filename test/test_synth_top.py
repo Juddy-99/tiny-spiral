@@ -15,10 +15,38 @@ seg7, HEX/LED panel wiring) all work end-to-end without needing actual FPGA
 time. It does NOT prove cycle parity -- that's the mem_bridge isolation
 test's job.
 """
+import json
+import time
+from pathlib import Path
+
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
 from .helpers.logger import logger
+
+
+# #region agent log
+def _agent_debug_log(hypothesis_id: str, message: str, data: dict, run_id: str) -> None:
+    """Append one NDJSON line for debug-mode evidence (session c328fc)."""
+    log_path = Path(__file__).resolve().parents[1] / ".cursor" / "debug-c328fc.log"
+    rec = {
+        "sessionId": "c328fc",
+        "timestamp": int(time.time() * 1000),
+        "hypothesisId": hypothesis_id,
+        "location": "test/test_synth_top.py",
+        "message": message,
+        "data": data,
+        "runId": run_id,
+    }
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(rec) + "\n")
+    except OSError:
+        pass
+
+
+# #endregion
 
 # 7-segment cathode pattern (active-low) -> nibble. Must mirror synth/seg7.sv.
 _SEG7_DECODE = {
@@ -124,3 +152,18 @@ async def test_synth_top(dut):
         f"Expected data_ram[16] readback = 100 (thread 0 equal-path write), "
         f"got {readback} on HEX1..HEX0"
     )
+
+    # #region agent log
+    _agent_debug_log(
+        "H_SIM",
+        "de1_soc synth_top simulation completed",
+        {
+            "done": done,
+            "max_pc_seen": max(seen_pcs),
+            "min_pc_seen": min(seen_pcs),
+            "distinct_pc_count": len(seen_pcs),
+            "mem16_readback_hex": readback,
+        },
+        run_id="sim-de1_soc-post-assert",
+    )
+    # #endregion

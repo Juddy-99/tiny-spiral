@@ -43,7 +43,13 @@ module core #(
     output wire [PROGRAM_MEM_ADDR_BITS-1:0] dbg_current_pc,
     output wire [THREADS_PER_BLOCK-1:0] dbg_active_mask,
     output wire [THREADS_PER_BLOCK-1:0] dbg_done_mask,
-    output wire [STACK_DBG_W-1:0] dbg_stack_ptr
+    output wire [STACK_DBG_W-1:0] dbg_stack_ptr,
+
+    // Hardware / Signal Tap: scheduler + per-lane LSU handshake (core 0 on GPU top)
+    output wire [2:0] dbg_core_state,
+    output wire [2:0] dbg_fetcher_state,
+    output wire [THREADS_PER_BLOCK-1:0] dbg_lsu_waiting,
+    output wire [THREADS_PER_BLOCK-1:0] dbg_lsu_requesting
 );
     // State
     reg [2:0] core_state;
@@ -171,6 +177,17 @@ module core #(
     assign dbg_active_mask = active_mask;
     assign dbg_done_mask = done_mask;
     assign dbg_stack_ptr = stack_ptr_dbg_sig;
+
+    assign dbg_core_state = core_state;
+    assign dbg_fetcher_state = fetcher_state;
+
+    genvar dbg_li;
+    generate
+        for (dbg_li = 0; dbg_li < THREADS_PER_BLOCK; dbg_li = dbg_li + 1) begin : dbg_lsu_flags
+            assign dbg_lsu_waiting[dbg_li]    = (lsu_state[dbg_li] == 2'b10);
+            assign dbg_lsu_requesting[dbg_li] = (lsu_state[dbg_li] == 2'b01);
+        end
+    endgenerate
 
     // Per-thread enables. `i < thread_count` disables slots beyond the block's
     // alive thread count; `active_mask[i]` additionally disables threads that

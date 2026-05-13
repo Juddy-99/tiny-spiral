@@ -1,0 +1,1 @@
+{"sessionId": "c328fc", "timestamp": 1778368519600, "hypothesisId": "H_SIM", "location": "test/test_synth_top.py", "message": "de1_soc synth_top simulation completed", "data": {"done": true, "max_pc_seen": 13, "min_pc_seen": 0, "distinct_pc_count": 14, "mem16_readback_hex": 100}, "runId": "sim-de1_soc-post-assert"}

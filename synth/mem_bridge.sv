@@ -4,22 +4,13 @@
 // MEM_BRIDGE
 // > One-channel adapter between the GPU memory controller's valid/ready handshake
 //   (see src/controller.sv) and an inferred RAM block (async read, sync write).
-// > Cycle-count parity with the Python Memory model (test/helpers/memory.py)
-//   requires the controller to spend exactly TWO cycles in READ_WAITING /
-//   WRITE_WAITING -- one to assert valid, one to see ready. Python achieves
-//   that by reading the new valid mid-cycle and asserting ready before the
-//   next edge. We mirror that timing by registering ready (and the captured
-//   data for reads), so:
-//      cycle K   : controller transitions IDLE -> WAITING, drives valid=1.
-//      cycle K+1 : bridge samples valid=1, registers ready_q<=1 and
-//                  data_q<=ram_dout (which equals mem[address] this cycle
-//                  because the RAM is async-read).
-//      cycle K+2 : controller samples ready=1, drops valid, transitions to
-//                  RELAYING. mem_read_data is the registered data_q.
-// > A bare combinational `assign ready = valid` was 1 cycle FASTER per
-//   transaction (matadd ran in 159 vs 178 cycles), which broke the cycle-
-//   parity contract with the Python model. The 1-cycle ready register matches
-//   Python exactly, and both shapes are equally synthesizable.
+// > Reads: register ready + captured data so the controller spends two cycles
+//   in READ_WAITING (matches Python Memory.run scheduling in cocotb).
+// > Writes: Python sets mem_write_ready=1 in the same step whenever
+//   mem_write_valid=1 (memory.py). That is combinational ready == valid for
+//   the write handshake. A registered write_ready_q added one extra cycle that
+//   still worked in Icarus but failed on some FPGA builds (STR hang at fixed PC).
+//   So mem_write_ready is combinational from mem_write_valid when WRITE_ENABLE=1.
 //
 // One bridge instance per controller channel:
 //   - 1 for the program controller (WRITE_ENABLE=0).
@@ -58,25 +49,20 @@ module mem_bridge #(
     assign ram_we   = writing;
     assign ram_din  = mem_write_data;
 
-    // Registered ready + data: 1-cycle latency from valid -> ready, matching
-    // Python's Memory.run timing.
     reg                  read_ready_q;
     reg [DATA_BITS-1:0]  read_data_q;
-    reg                  write_ready_q;
 
     always @(posedge clk) begin
         if (reset) begin
             read_ready_q  <= 1'b0;
             read_data_q   <= {DATA_BITS{1'b0}};
-            write_ready_q <= 1'b0;
         end else begin
             read_ready_q  <= mem_read_valid;
             read_data_q   <= ram_dout;
-            write_ready_q <= writing;
         end
     end
 
     assign mem_read_ready  = read_ready_q;
     assign mem_read_data   = read_data_q;
-    assign mem_write_ready = write_ready_q;
+    assign mem_write_ready = writing;
 endmodule

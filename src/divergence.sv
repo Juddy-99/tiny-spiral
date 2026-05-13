@@ -28,8 +28,8 @@
 //   PC still trigger reconvergence. At most one stack op per cycle (push, pop,
 //   or pop+push swap on leapfrog).
 //
-// Baseline before this module existed (THREADS_PER_BLOCK=4):
-//   matadd = 178 cycles, matmul = 491 cycles.
+// Baseline convergent kernels (THREADS_PER_BLOCK=4, current LSU/memory path):
+//   matadd = 176 cycles, matmul = 490 cycles.
 // These cycle counts MUST stay identical for the no-divergence path. With no BR
 // or only convergent BR, all threads always agree on next_pc, so internally
 // diverged is false and the stack stays empty -- behavior reduces exactly to the

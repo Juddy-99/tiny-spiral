@@ -23,7 +23,8 @@ from .helpers.logger import logger
 
 # Matadd baseline cycles (run with default Python Memory model). Any drift
 # means the bridge is not cycle-equivalent to data_memory.run().
-MATADD_BASELINE_CYCLES = 178
+# 175: mem_bridge write_ready = valid (Python memory.py); gpu write_ready bypass.
+MATADD_BASELINE_CYCLES = 175
 
 
 @cocotb.test()

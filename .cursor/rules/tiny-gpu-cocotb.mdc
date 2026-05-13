@@ -83,6 +83,7 @@ Match `test/test_matadd.py`, `test/test_matmul.py`, and helpers under `test/help
 
    - `make test_mem_bridge` — top is `sim_harness` (gpu + `mem_bridge` + sim ROM/RAM, see `synth/sim_harness.sv`).
    - `make test_synth_top` — top is `de1_soc`; auto-runs `make synth_kernel KERNEL=test_diverge_ifelse` first to regenerate `synth/kernel_memories.sv`, then compiles with `-Pde1_soc.SLOW_CLK_DIV=2` so `gpu_clk` ticks fast enough for cocotb.
+   - `make test_synth_debug` — same build as `test_synth_top`, runs `test/test_synth_debug.py` (LEDR page 0 vs `data_mem_write_valid`, PC=9 triple-store / LSU masking checks).
 
 4. **Read results.** Two outputs:
 
@@ -98,4 +99,4 @@ Match `test/test_matadd.py`, `test/test_matmul.py`, and helpers under `test/help
    done
    ```
 
-   All eight must report `PASS`. matadd must finish in **178 cycles** and matmul in **491 cycles** (regression numbers locked in at the top of `src/divergence.sv`).
+   All eight must report `PASS`. matadd must finish in **176 cycles** and matmul in **490 cycles** (regression numbers locked in at the top of `src/divergence.sv`).
