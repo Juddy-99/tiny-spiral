@@ -87,8 +87,11 @@ module scheduler #(
                         end
                     end
 
+                    // TEMP: bypass memory wait for LabsLand PC-stall isolation.
+                    core_state <= EXECUTE;
+
                     // If no LSU is waiting for a response, move onto the next stage
-                    if (!any_lsu_waiting) begin
+                    if (1'b0 && !any_lsu_waiting) begin
                         core_state <= EXECUTE;
                     end
                 end
