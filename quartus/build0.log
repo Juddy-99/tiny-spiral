@@ -1,0 +1,62 @@
+$ quartus_map DE1_SoC --source COMPILATION_DIRECTORY/DE1_SoC.sv --source COMPILATION_DIRECTORY/alu.sv --source COMPILATION_DIRECTORY/controller.sv --source COMPILATION_DIRECTORY/core.sv --source COMPILATION_DIRECTORY/dcr.sv --source COMPILATION_DIRECTORY/decoder.sv --source COMPILATION_DIRECTORY/dispatch.sv --source COMPILATION_DIRECTORY/fetcher.sv --source COMPILATION_DIRECTORY/gpu.sv --source COMPILATION_DIRECTORY/lsu.sv --source COMPILATION_DIRECTORY/pc.sv --source COMPILATION_DIRECTORY/registers.sv --source COMPILATION_DIRECTORY/scheduler.sv --family "Cyclone V" --part 5CSEMA5F31C6
+Info: *******************************************************************
+Info: Running Quartus Prime Analysis & Synthesis
+    Info: Version 17.1.0 Build 590 10/25/2017 SJ Lite Edition
+    Info: Copyright (C) 2017  Intel Corporation. All rights reserved.
+    Info: Your use of Intel Corporation's design tools, logic functions 
+    Info: and other software and tools, and its AMPP partner logic 
+    Info: functions, and any output files from any of the foregoing 
+    Info: (including device programming or simulation files), and any 
+    Info: associated documentation or information are expressly subject 
+    Info: to the terms and conditions of the Intel Program License 
+    Info: Subscription Agreement, the Intel Quartus Prime License Agreement,
+    Info: the Intel FPGA IP License Agreement, or other applicable license
+    Info: agreement, including, without limitation, that your use is for
+    Info: the sole purpose of programming logic devices manufactured by
+    Info: Intel and sold by Intel or its authorized distributors.  Please
+    Info: refer to the applicable agreement for further details.
+    Info: Processing started: Sun May  3 18:40:06 2026
+Info: Command: quartus_map DE1_SoC --source=COMPILATION_DIRECTORY/DE1_SoC.sv --source=COMPILATION_DIRECTORY/alu.sv --source=COMPILATION_DIRECTORY/controller.sv --source=COMPILATION_DIRECTORY/core.sv --source=COMPILATION_DIRECTORY/dcr.sv --source=COMPILATION_DIRECTORY/decoder.sv --source=COMPILATION_DIRECTORY/dispatch.sv --source=COMPILATION_DIRECTORY/fetcher.sv --source=COMPILATION_DIRECTORY/gpu.sv --source=COMPILATION_DIRECTORY/lsu.sv --source=COMPILATION_DIRECTORY/pc.sv --source=COMPILATION_DIRECTORY/registers.sv --source=COMPILATION_DIRECTORY/scheduler.sv --family="Cyclone V" --part=5CSEMA5F31C6
+Info (20030): Parallel compilation is enabled and will use 8 of the 8 processors detected
+Info (12021): Found 1 design units, including 1 entities, in source file DE1_SoC.sv
+    Info (12023): Found entity 1: DE1_SoC File: COMPILATION_DIRECTORY/DE1_SoC.sv Line: 4
+Info (12021): Found 1 design units, including 1 entities, in source file alu.sv
+    Info (12023): Found entity 1: alu File: COMPILATION_DIRECTORY/alu.sv Line: 9
+Info (12021): Found 1 design units, including 1 entities, in source file controller.sv
+    Info (12023): Found entity 1: controller File: COMPILATION_DIRECTORY/controller.sv Line: 8
+Error (10170): Verilog HDL syntax error at core.sv(116) near text: ")";  expecting ".", or an operand. Check for and fix any syntax errors that appear immediately before or at the specified keyword. The Intel FPGA Knowledge Database contains many articles with specific details on how to resolve this error. Visit the Knowledge Database at https://www.altera.com/support/support-resources/knowledge-base/search.html and search for this specific error message number. File: COMPILATION_DIRECTORY/core.sv Line: 116
+Error (10170): Verilog HDL syntax error at core.sv(175) near text: ")";  expecting ".", or an operand. Check for and fix any syntax errors that appear immediately before or at the specified keyword. The Intel FPGA Knowledge Database contains many articles with specific details on how to resolve this error. Visit the Knowledge Database at https://www.altera.com/support/support-resources/knowledge-base/search.html and search for this specific error message number. File: COMPILATION_DIRECTORY/core.sv Line: 175
+Error (10112): Ignored design unit "core" at core.sv(8) due to previous errors File: COMPILATION_DIRECTORY/core.sv Line: 8
+Info (12021): Found 0 design units, including 0 entities, in source file core.sv
+Error (10170): Verilog HDL syntax error at dcr.sv(14) near text: ")";  expecting a direction. Check for and fix any syntax errors that appear immediately before or at the specified keyword. The Intel FPGA Knowledge Database contains many articles with specific details on how to resolve this error. Visit the Knowledge Database at https://www.altera.com/support/support-resources/knowledge-base/search.html and search for this specific error message number. File: COMPILATION_DIRECTORY/dcr.sv Line: 14
+Error (10112): Ignored design unit "dcr" at dcr.sv(7) due to previous errors File: COMPILATION_DIRECTORY/dcr.sv Line: 7
+Info (12021): Found 0 design units, including 0 entities, in source file dcr.sv
+Info (12021): Found 1 design units, including 1 entities, in source file decoder.sv
+    Info (12023): Found entity 1: decoder File: COMPILATION_DIRECTORY/decoder.sv Line: 7
+Info (12021): Found 1 design units, including 1 entities, in source file dispatch.sv
+    Info (12023): Found entity 1: dispatch File: COMPILATION_DIRECTORY/dispatch.sv Line: 8
+Error (10170): Verilog HDL syntax error at fetcher.sv(27) near text: ")";  expecting a direction. Check for and fix any syntax errors that appear immediately before or at the specified keyword. The Intel FPGA Knowledge Database contains many articles with specific details on how to resolve this error. Visit the Knowledge Database at https://www.altera.com/support/support-resources/knowledge-base/search.html and search for this specific error message number. File: COMPILATION_DIRECTORY/fetcher.sv Line: 27
+Error (10112): Ignored design unit "fetcher" at fetcher.sv(7) due to previous errors File: COMPILATION_DIRECTORY/fetcher.sv Line: 7
+Info (12021): Found 0 design units, including 0 entities, in source file fetcher.sv
+Warning (10275): Verilog HDL Module Instantiation warning at gpu.sv(134): ignored dangling comma in List of Port Connections File: COMPILATION_DIRECTORY/gpu.sv Line: 134
+Error (10644): Verilog HDL error at gpu.sv(170): this block requires a name File: COMPILATION_DIRECTORY/gpu.sv Line: 170
+Error (10170): Verilog HDL syntax error at gpu.sv(193) near text: ")";  expecting ".", or an operand. Check for and fix any syntax errors that appear immediately before or at the specified keyword. The Intel FPGA Knowledge Database contains many articles with specific details on how to resolve this error. Visit the Knowledge Database at https://www.altera.com/support/support-resources/knowledge-base/search.html and search for this specific error message number. File: COMPILATION_DIRECTORY/gpu.sv Line: 193
+Error (10112): Ignored design unit "gpu" at gpu.sv(10) due to previous errors File: COMPILATION_DIRECTORY/gpu.sv Line: 10
+Info (12021): Found 0 design units, including 0 entities, in source file gpu.sv
+Info (12021): Found 1 design units, including 1 entities, in source file lsu.sv
+    Info (12023): Found entity 1: lsu File: COMPILATION_DIRECTORY/lsu.sv Line: 8
+Info (12021): Found 1 design units, including 1 entities, in source file pc.sv
+    Info (12023): Found entity 1: pc File: COMPILATION_DIRECTORY/pc.sv Line: 10
+Info (12021): Found 1 design units, including 1 entities, in source file registers.sv
+    Info (12023): Found entity 1: registers File: COMPILATION_DIRECTORY/registers.sv Line: 7
+Error (10170): Verilog HDL syntax error at scheduler.sv(18) near text: ")";  expecting an identifier. Check for and fix any syntax errors that appear immediately before or at the specified keyword. The Intel FPGA Knowledge Database contains many articles with specific details on how to resolve this error. Visit the Knowledge Database at https://www.altera.com/support/support-resources/knowledge-base/search.html and search for this specific error message number. File: COMPILATION_DIRECTORY/scheduler.sv Line: 18
+Error (10112): Ignored design unit "scheduler" at scheduler.sv(16) due to previous errors File: COMPILATION_DIRECTORY/scheduler.sv Line: 16
+Info (12021): Found 0 design units, including 0 entities, in source file scheduler.sv
+Info (144001): Generated suppressed messages file COMPILATION_DIRECTORY/DE1_SoC.map.smsg
+Error: Quartus Prime Analysis & Synthesis was unsuccessful. 12 errors, 1 warning
+    Error: Peak virtual memory: 915 megabytes
+    Error: Processing ended: Sun May  3 18:40:12 2026
+    Error: Elapsed time: 00:00:06
+    Error: Total CPU time (on all processors): 00:00:19
+
+[Build error after 6 seconds seconds. Compiler returned: 3]
