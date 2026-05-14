@@ -38,7 +38,9 @@ module scheduler #(
 
     // Execution State
     output reg [2:0] core_state,
-    output reg done
+    output reg done,
+    
+    output reg any_lsu_waiting
 );
     localparam IDLE = 3'b000, // Waiting to start
         FETCH = 3'b001,       // Fetch instructions from program memory
@@ -48,6 +50,16 @@ module scheduler #(
         EXECUTE = 3'b101,     // Execute ALU and PC calculations
         UPDATE = 3'b110,      // Update registers, NZP, and PC
         DONE = 3'b111;        // Done executing this block
+
+    always_comb begin
+        any_lsu_waiting = 1'b0;
+        for (int i = 0; i < THREADS_PER_BLOCK; i++) begin
+            if (lsu_state[i] == 2'b01 || lsu_state[i] == 2'b10) begin
+                any_lsu_waiting = 1'b1;
+                break;
+            end
+        end
+    end
     
     always @(posedge clk) begin 
         if (reset) begin
@@ -78,20 +90,8 @@ module scheduler #(
                 end
                 WAIT: begin
                     // Wait for all LSUs to finish their request before continuing
-                    reg any_lsu_waiting = 1'b0;
-                    for (int i = 0; i < THREADS_PER_BLOCK; i++) begin
-                        // Make sure no lsu_state = REQUESTING or WAITING
-                        if (lsu_state[i] == 2'b01 || lsu_state[i] == 2'b10) begin
-                            any_lsu_waiting = 1'b1;
-                            break;
-                        end
-                    end
-
-                    // TEMP: bypass memory wait for LabsLand PC-stall isolation.
-                    core_state <= EXECUTE;
-
                     // If no LSU is waiting for a response, move onto the next stage
-                    if (1'b0 && !any_lsu_waiting) begin
+                    if (!any_lsu_waiting) begin
                         core_state <= EXECUTE;
                     end
                 end

@@ -49,7 +49,8 @@ module core #(
     output wire [2:0] dbg_core_state,
     output wire [2:0] dbg_fetcher_state,
     output wire [THREADS_PER_BLOCK-1:0] dbg_lsu_waiting,
-    output wire [THREADS_PER_BLOCK-1:0] dbg_lsu_requesting
+    output wire [THREADS_PER_BLOCK-1:0] dbg_lsu_requesting,
+    output wire dbg_any_lsu_waiting
 );
     // State
     reg [2:0] core_state;
@@ -135,6 +136,7 @@ module core #(
         .decoded_ret(decoded_ret)
     );
 
+    wire any_lsu_waiting;
     // Scheduler
     scheduler #(
         .THREADS_PER_BLOCK(THREADS_PER_BLOCK)
@@ -148,8 +150,11 @@ module core #(
         .decoded_mem_write_enable(decoded_mem_write_enable),
         .lsu_state(lsu_state),
         .block_done(block_done),
-        .done(done)
+        .done(done),
+        .any_lsu_waiting(any_lsu_waiting)
     );
+
+    assign dbg_any_lsu_waiting = any_lsu_waiting;
 
     // Divergence unit owns current_pc, active_mask, done_mask, and the SIMT
     // reconvergence stack. See src/divergence.sv for the algorithm.

@@ -135,6 +135,7 @@ module de1_soc #(
     wire [2:0] dbg_core0_fetcher_state;
     wire [THREADS_PER_BLOCK-1:0] dbg_core0_lsu_waiting;
     wire [THREADS_PER_BLOCK-1:0] dbg_core0_lsu_requesting;
+    wire dbg_core0_any_lsu_waiting;
 
     wire [PROGRAM_MEM_NUM_CHANNELS-1:0] prog_mem_read_valid;
     wire [7:0] prog_mem_read_address [PROGRAM_MEM_NUM_CHANNELS-1:0];
@@ -187,7 +188,8 @@ module de1_soc #(
         .dbg_core0_state(dbg_core0_state),
         .dbg_core0_fetcher_state(dbg_core0_fetcher_state),
         .dbg_core0_lsu_waiting(dbg_core0_lsu_waiting),
-        .dbg_core0_lsu_requesting(dbg_core0_lsu_requesting)
+        .dbg_core0_lsu_requesting(dbg_core0_lsu_requesting),
+        .dbg_core0_any_lsu_waiting(dbg_core0_any_lsu_waiting)
     );
 
     // ---- Program memory: bridge + ROM ----
@@ -328,7 +330,7 @@ module de1_soc #(
     wire [9:0] ledr_debug_sel;
 
     assign ledr_normal[9]   = gpu_done;
-    assign ledr_normal[8]   = (stack_ptr != 3'b0);
+    assign ledr_normal[8]   = dbg_core0_any_lsu_waiting;
     assign ledr_normal[7:4] = done_mask;
     assign ledr_normal[3:0] = active_mask;
 
