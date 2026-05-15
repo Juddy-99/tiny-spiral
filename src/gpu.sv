@@ -54,7 +54,8 @@ module gpu #(
     output wire [2:0] dbg_core0_state,
     output wire [2:0] dbg_core0_fetcher_state,
     output wire [THREADS_PER_BLOCK-1:0] dbg_core0_lsu_waiting,
-    output wire [THREADS_PER_BLOCK-1:0] dbg_core0_lsu_requesting
+    output wire [THREADS_PER_BLOCK-1:0] dbg_core0_lsu_requesting,
+    output wire [1:0] dbg_core0_lsu_state [THREADS_PER_BLOCK-1:0]
 );
     // Control
     wire [7:0] thread_count;
@@ -67,6 +68,7 @@ module gpu #(
     wire [2:0] dbg_fetcher_state_c [NUM_CORES-1:0];
     wire [THREADS_PER_BLOCK-1:0] dbg_lsu_waiting_c [NUM_CORES-1:0];
     wire [THREADS_PER_BLOCK-1:0] dbg_lsu_requesting_c [NUM_CORES-1:0];
+    wire [1:0] dbg_lsu_state_c [NUM_CORES-1:0][THREADS_PER_BLOCK-1:0];
 
     // Compute Core State
     reg [NUM_CORES-1:0] core_start;
@@ -246,7 +248,8 @@ module gpu #(
                 .dbg_core_state(dbg_core_state_c[i]),
                 .dbg_fetcher_state(dbg_fetcher_state_c[i]),
                 .dbg_lsu_waiting(dbg_lsu_waiting_c[i]),
-                .dbg_lsu_requesting(dbg_lsu_requesting_c[i])
+                .dbg_lsu_requesting(dbg_lsu_requesting_c[i]),
+                .dbg_lsu_state(dbg_lsu_state_c[i])
             );
         end
     endgenerate
@@ -259,4 +262,5 @@ module gpu #(
     assign dbg_core0_fetcher_state = dbg_fetcher_state_c[0];
     assign dbg_core0_lsu_waiting = dbg_lsu_waiting_c[0];
     assign dbg_core0_lsu_requesting = dbg_lsu_requesting_c[0];
+    assign dbg_core0_lsu_state = dbg_lsu_state_c[0];
 endmodule

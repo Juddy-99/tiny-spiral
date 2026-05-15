@@ -48,7 +48,7 @@ module scheduler #(
         EXECUTE = 3'b101,     // Execute ALU and PC calculations
         UPDATE = 3'b110,      // Update registers, NZP, and PC
         DONE = 3'b111;        // Done executing this block
-    
+        
     always @(posedge clk) begin 
         if (reset) begin
             core_state <= IDLE;
@@ -87,11 +87,9 @@ module scheduler #(
                         end
                     end
 
-                    // TEMP: bypass memory wait for LabsLand PC-stall isolation.
-                    core_state <= EXECUTE;
 
                     // If no LSU is waiting for a response, move onto the next stage
-                    if (1'b0 && !any_lsu_waiting) begin
+                    if (!any_lsu_waiting) begin
                         core_state <= EXECUTE;
                     end
                 end

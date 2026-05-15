@@ -49,7 +49,8 @@ module core #(
     output wire [2:0] dbg_core_state,
     output wire [2:0] dbg_fetcher_state,
     output wire [THREADS_PER_BLOCK-1:0] dbg_lsu_waiting,
-    output wire [THREADS_PER_BLOCK-1:0] dbg_lsu_requesting
+    output wire [THREADS_PER_BLOCK-1:0] dbg_lsu_requesting,
+    output wire [1:0] dbg_lsu_state [THREADS_PER_BLOCK-1:0]
 );
     // State
     reg [2:0] core_state;
@@ -186,6 +187,7 @@ module core #(
         for (dbg_li = 0; dbg_li < THREADS_PER_BLOCK; dbg_li = dbg_li + 1) begin : dbg_lsu_flags
             assign dbg_lsu_waiting[dbg_li]    = (lsu_state[dbg_li] == 2'b10);
             assign dbg_lsu_requesting[dbg_li] = (lsu_state[dbg_li] == 2'b01);
+            assign dbg_lsu_state[dbg_li]      = lsu_state[dbg_li];
         end
     endgenerate
 

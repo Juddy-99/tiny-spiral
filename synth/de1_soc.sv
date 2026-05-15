@@ -22,7 +22,11 @@
 //   HEX1..HEX0 : data_ram[SW[7:4]]  (8-bit hex readback for arbitrary scrubbing)
 //   LEDR (SW[8]=0, normal):
 //     [9] done  [8] stack_ptr!=0  [7:4] done_mask  [3:0] active_mask
-//   LEDR (SW[8]=1, debug — see SW[3:2] pages in module comment below)
+//   LEDR (SW[8]=1, debug — see SW[3:2] pages in module comment below):
+//     [3:0] on every debug page: selected thread (SW[1:0]) LSU panel:
+//           [1:0]=lsu_state (0=IDLE 1=REQUESTING 2=WAITING 3=DONE),
+//           [2]=active_mask[thread], [3]=done_mask[thread].
+//     [9:4] meaning depends on SW[3:2] (page-specific; see below).
 //
 // Switches / buttons:
 //   KEY[3]  : reset (active low)
@@ -30,17 +34,17 @@
 //   SW[9]   : 0 = single-step mode, 1 = auto-tick at SLOW_CLK_DIV cadence
 //   SW[7:4] : data_ram readback address for HEX1..HEX0
 //   SW[8]   : 0 = normal LEDR (done / masks). 1 = hardware debug LEDR pages (below).
-//   SW[3:2] : debug page when SW[8]=1:
-//               0 = data write GPU↔bridge: [3:0]=mem wr_valid (per RAM port /
-//                   controller channel — 4 ports for 8 LSUs), [7:4]=per-ch stuck (v&~r),
-//                   [8]=|stuck, [9]=done
-//               1 = data RAM + read: [3:0]=data_ram_we, [7:4]=rd_valid,
-//                   [8]=stuck read, [9]=done
+//   SW[3:2] : debug page when SW[8]=1 (LEDR[3:0] always selected-thread LSU):
+//   SW[1:0] : thread index for LEDR[3:0] when SW[8]=1 (core 0 lanes 0..3)
+//               0 = data write GPU↔bridge: [7:4]=mem wr_valid (per controller channel),
+//                   [8]=|stuck wr, [9]=done
+//               1 = data RAM + read: [7:4]=rd_valid, [8]=stuck read, [9]=done
 //               2 = core0 FSM: [2:0]=core_state (sched: 0=IDLE 1=FETCH 2=DECODE
 //                   3=REQUEST 4=WAIT 5=EXECUTE 6=UPDATE 7=DONE), [5:3]=fetcher
 //                   (0=IDLE 1=FETCHING 2=FETCHED), [6]=in_WAIT, [7]=stuck data wr,
 //                   [8]=prog fetch stuck, [9]=done
-//               3 = core0 LSU: [3:0]=waiting, [7:4]=requesting, [8]=|waiting, [9]=done
+//               3 = core0 LSU: [7:4]=requesting, [8]=any_lsu_waiting (sched WAIT stall),
+//                   [9]=done
 //   Signal Tap: probe `de1_hardware_dbg_keep`, `gpu_instance.dbg_core0_*`, and
 //   `data_mem_*` / `data_ram_we` in de1_soc (names survive in Quartus STP).
 module de1_soc #(
@@ -135,6 +139,7 @@ module de1_soc #(
     wire [2:0] dbg_core0_fetcher_state;
     wire [THREADS_PER_BLOCK-1:0] dbg_core0_lsu_waiting;
     wire [THREADS_PER_BLOCK-1:0] dbg_core0_lsu_requesting;
+    wire [1:0] dbg_core0_lsu_state [THREADS_PER_BLOCK-1:0];
 
     wire [PROGRAM_MEM_NUM_CHANNELS-1:0] prog_mem_read_valid;
     wire [7:0] prog_mem_read_address [PROGRAM_MEM_NUM_CHANNELS-1:0];
@@ -187,7 +192,8 @@ module de1_soc #(
         .dbg_core0_state(dbg_core0_state),
         .dbg_core0_fetcher_state(dbg_core0_fetcher_state),
         .dbg_core0_lsu_waiting(dbg_core0_lsu_waiting),
-        .dbg_core0_lsu_requesting(dbg_core0_lsu_requesting)
+        .dbg_core0_lsu_requesting(dbg_core0_lsu_requesting),
+        .dbg_core0_lsu_state(dbg_core0_lsu_state)
     );
 
     // ---- Program memory: bridge + ROM ----
@@ -310,15 +316,19 @@ module de1_soc #(
         dbg_core0_fetcher_state
     };
 
-    localparam CORE_WAIT = 3'b100;
-
     wire [DATA_MEM_NUM_CHANNELS-1:0] ch_wr_stuck =
         data_mem_write_valid & ~data_mem_write_ready;
     wire stuck_data_write   = |ch_wr_stuck;
     wire stuck_data_read    = |(data_mem_read_valid & ~data_mem_read_ready);
     wire stuck_prog_read    = prog_mem_read_valid[0] & ~prog_mem_read_ready[0];
-    wire in_scheduler_wait  = (dbg_core0_state == CORE_WAIT);
-    wire any_lsu_wait       = |dbg_core0_lsu_waiting;
+    wire any_lsu_waiting    = |dbg_core0_lsu_requesting | |dbg_core0_lsu_waiting;
+    wire [1:0] dbg_thread_sel = SW[1:0];
+    wire [1:0] dbg_lsu_sel_state = dbg_core0_lsu_state[dbg_thread_sel];
+    wire [3:0] ledr_debug_lsu_sel = {
+        done_mask[dbg_thread_sel],
+        active_mask[dbg_thread_sel],
+        dbg_lsu_sel_state
+    };
 
     wire [9:0] ledr_normal;
     wire [9:0] ledr_debug_p0;
@@ -332,26 +342,25 @@ module de1_soc #(
     assign ledr_normal[7:4] = done_mask;
     assign ledr_normal[3:0] = active_mask;
 
-    assign ledr_debug_p0[3:0] = data_mem_write_valid;
-    assign ledr_debug_p0[7:4] = ch_wr_stuck;
+    assign ledr_debug_p0[3:0] = ledr_debug_lsu_sel;
+    assign ledr_debug_p0[7:4] = data_mem_write_valid;
     assign ledr_debug_p0[8]   = stuck_data_write;
     assign ledr_debug_p0[9]   = gpu_done;
 
-    assign ledr_debug_p1[3:0] = data_ram_we;
+    assign ledr_debug_p1[3:0] = ledr_debug_lsu_sel;
     assign ledr_debug_p1[7:4] = data_mem_read_valid;
     assign ledr_debug_p1[8]   = stuck_data_read;
     assign ledr_debug_p1[9]   = gpu_done;
 
-    assign ledr_debug_p2[2:0] = dbg_core0_state;
-    assign ledr_debug_p2[5:3] = dbg_core0_fetcher_state;
-    assign ledr_debug_p2[6]   = in_scheduler_wait;
+    assign ledr_debug_p2[3:0] = ledr_debug_lsu_sel;
+    assign ledr_debug_p2[6:4] = dbg_core0_state;
     assign ledr_debug_p2[7]   = stuck_data_write;
     assign ledr_debug_p2[8]   = stuck_prog_read;
     assign ledr_debug_p2[9]   = gpu_done;
 
-    assign ledr_debug_p3[3:0] = dbg_core0_lsu_waiting;
+    assign ledr_debug_p3[3:0] = ledr_debug_lsu_sel;
     assign ledr_debug_p3[7:4] = dbg_core0_lsu_requesting;
-    assign ledr_debug_p3[8]   = any_lsu_wait;
+    assign ledr_debug_p3[8]   = any_lsu_waiting;
     assign ledr_debug_p3[9]   = gpu_done;
 
     assign ledr_debug_sel = (SW[3:2] == 2'b00) ? ledr_debug_p0

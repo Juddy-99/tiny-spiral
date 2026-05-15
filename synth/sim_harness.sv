@@ -60,6 +60,7 @@ module sim_harness #(
     wire [2:0] dbg_core0_fetcher_state_nc;
     wire [THREADS_PER_BLOCK-1:0] dbg_core0_lsu_waiting_nc;
     wire [THREADS_PER_BLOCK-1:0] dbg_core0_lsu_requesting_nc;
+    wire [1:0] dbg_core0_lsu_state_nc [THREADS_PER_BLOCK-1:0];
 
     gpu #(
         .DATA_MEM_ADDR_BITS(DATA_MEM_ADDR_BITS),
@@ -98,7 +99,8 @@ module sim_harness #(
         .dbg_core0_state(dbg_core0_state_nc),
         .dbg_core0_fetcher_state(dbg_core0_fetcher_state_nc),
         .dbg_core0_lsu_waiting(dbg_core0_lsu_waiting_nc),
-        .dbg_core0_lsu_requesting(dbg_core0_lsu_requesting_nc)
+        .dbg_core0_lsu_requesting(dbg_core0_lsu_requesting_nc),
+        .dbg_core0_lsu_state(dbg_core0_lsu_state_nc)
     );
 
     // Program memory: bridges + ROM

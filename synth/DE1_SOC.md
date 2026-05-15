@@ -27,7 +27,7 @@ make synth_kernel KERNEL=test_diverge_ifelse
 | **SW[8]** | `0` = normal **LEDR** (status); `1` = hardware debug **LEDR** pages (use **SW[3:2]**) |
 | **SW[7:4]** | Data RAM readback index for **HEX1** and **HEX0** (see below) |
 | **SW[3:2]** | Debug LED page when **SW[8] = 1** (see [Debug LED pages](#debug-led-pages-sw8--1)) |
-| **SW[1:0]** | Unused |
+| **SW[1:0]** | Core 0 thread index for **LEDR[3:0]** when **SW[8] = 1** |
 
 ### Data memory address on **SW[7:4]**
 
@@ -78,14 +78,21 @@ Each display is one hex digit (active-low segments via [`seg7.sv`](seg7.sv)).
 
 ### Debug LED pages (**SW[8] = 1**)
 
-**SW[3:2]** selects the page. **LEDR[9]** is `done` on every page.
+**SW[3:2]** selects the page. **SW[1:0]** selects which core 0 thread (0–3) feeds **LEDR[3:0]** on every debug page. **LEDR[9]** is `done` on every page.
+
+**LEDR[3:0]** (selected thread):
+
+| LED | Signal |
+|-----|--------|
+| **LEDR[1:0]** | LSU FSM: `00` IDLE, `01` REQUESTING, `10` WAITING, `11` DONE |
+| **LEDR[2]** | `active_mask[thread]` |
+| **LEDR[3]** | `done_mask[thread]` |
 
 #### Page 0 — `SW[3:2] = 00` (GPU ↔ bridge writes)
 
 | LED | Signal |
 |-----|--------|
-| **LEDR[3:0]** | `data_mem_write_valid` per memory-controller channel (4 channels, not one LED per thread) |
-| **LEDR[7:4]** | Per-channel write stuck: `valid & ~ready` |
+| **LEDR[7:4]** | `data_mem_write_valid` per memory-controller channel |
 | **LEDR[8]** | Any channel write stuck |
 | **LEDR[9]** | `done` |
 
@@ -93,18 +100,15 @@ Each display is one hex digit (active-low segments via [`seg7.sv`](seg7.sv)).
 
 | LED | Signal |
 |-----|--------|
-| **LEDR[3:0]** | `data_ram_we` per RAM port |
 | **LEDR[7:4]** | `data_mem_read_valid` per channel |
 | **LEDR[8]** | Read stuck: `valid & ~ready` |
 | **LEDR[9]** | `done` |
 
-#### Page 2 — `SW[3:2] = 10` (core 0 scheduler / fetcher)
+#### Page 2 — `SW[3:2] = 10` (core 0 scheduler)
 
 | LED | Signal |
 |-----|--------|
-| **LEDR[2:0]** | `core_state` — scheduler FSM (core 0) |
-| **LEDR[5:3]** | `fetcher_state` |
-| **LEDR[6]** | Scheduler in **WAIT** |
+| **LEDR[6:4]** | `core_state` — scheduler FSM (core 0) |
 | **LEDR[7]** | Data write stuck |
 | **LEDR[8]** | Program fetch stuck |
 | **LEDR[9]** | `done` |
@@ -130,12 +134,11 @@ Fetcher `fetcher_state` encoding:
 | 1 | FETCHING |
 | 2 | FETCHED |
 
-#### Page 3 — `SW[3:2] = 11` (core 0 LSU)
+#### Page 3 — `SW[3:2] = 11` (core 0 LSU overview)
 
 | LED | Signal |
 |-----|--------|
-| **LEDR[3:0]** | Per-thread LSU **waiting** |
-| **LEDR[7:4]** | Per-thread LSU **requesting** |
+| **LEDR[7:4]** | Per-thread LSU **requesting** (all lanes) |
 | **LEDR[8]** | Any LSU waiting |
 | **LEDR[9]** | `done` |
 

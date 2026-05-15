@@ -3,8 +3,8 @@
 Use these tests when FPGA behavior (HEX PC, SW settings) does not match
 expectations.
 
-**Page 0 (SW[8]=1, SW[3:2]=0):** LEDR[3:0] mirrors `data_mem_write_valid` on the
-GPU top-level. Those bits are **memory-controller channel** write valids
+**Page 0 (SW[8]=1, SW[3:2]=0):** LEDR[7:4] mirrors `data_mem_write_valid` on the
+GPU top-level. LEDR[3:0] is the selected-thread LSU panel (SW[1:0]).
 (4 ports to multi-channel RAM), *not* one-hot per hardware thread. The data
 `controller` maps 8 LSUs → 4 channels; when threads 1..3 store together you
 typically see **three channel bits** asserted — often `4'b0111` (channels 0..2
@@ -31,13 +31,13 @@ def _sw_debug_p0(sw9_auto: int = 1) -> int:
 
 
 def _bits_match_ledr_write_valid(dut) -> bool:
-    """Return True if LEDR[3:0] matches gpu data_mem_write_valid (page 0 wiring)."""
+    """Return True if LEDR[7:4] matches gpu data_mem_write_valid (page 0 wiring)."""
     gpu = dut.gpu_instance
     ledr = _to_int_or_none(dut.LEDR.value)
     wv = _to_int_or_none(gpu.data_mem_write_valid.value)
     if ledr is None or wv is None:
         return False
-    return (ledr & 0xF) == (wv & 0xF)
+    return ((ledr >> 4) & 0xF) == (wv & 0xF)
 
 
 def _int8(sig):
@@ -54,7 +54,7 @@ def _popcount4(x: int) -> int:
 
 @cocotb.test()
 async def test_debug_page0_ledr_tracks_write_valid(dut):
-    """LEDR[3:0] must always equal data_mem_write_valid when SW[8]=1, SW[3:2]=0."""
+    """LEDR[7:4] must always equal data_mem_write_valid when SW[8]=1, SW[3:2]=0."""
     clock = Clock(dut.CLOCK_50, 20, units="ns")
     cocotb.start_soon(clock.start())
 
@@ -83,7 +83,7 @@ async def test_debug_page0_ledr_tracks_write_valid(dut):
 
     assert checked > 1000, "Too few non-X samples to verify LEDR vs mem_write_valid"
     assert mismatches == 0, (
-        f"LEDR[3:0] != data_mem_write_valid in {mismatches}/{checked} non-X samples "
+        f"LEDR[7:4] != data_mem_write_valid in {mismatches}/{checked} non-X samples "
         "(SW[8]=1 debug page 0)"
     )
 
@@ -139,7 +139,7 @@ async def test_pc9_str_three_channels_and_lsus_123_not_0(dut):
             f"  pc={pc} mem_ch_wv={wv} LEDR3_0={ledr_lo} core_state={cst} "
             f"lsu_cv[3:0]={(cv & 0xF) if cv is not None else None}"
         )
-        if pc == 9 and wv is not None and cv is not None and _popcount4(wv) == 3:
+        if pc is not None and pc in (9, 10) and wv is not None and cv is not None and _popcount4(wv) == 3:
             triple_mem.append((wv, cv & 0xF, cst))
 
     for line in log_lines[:20]:
