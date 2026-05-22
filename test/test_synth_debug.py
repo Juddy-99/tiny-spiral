@@ -139,7 +139,7 @@ async def test_pc9_str_three_channels_and_lsus_123_not_0(dut):
             f"  pc={pc} mem_ch_wv={wv} LEDR3_0={ledr_lo} core_state={cst} "
             f"lsu_cv[3:0]={(cv & 0xF) if cv is not None else None}"
         )
-        if pc == 9 and wv is not None and cv is not None and _popcount4(wv) == 3:
+        if pc is not None and pc in (9, 10) and wv is not None and cv is not None and _popcount4(wv) == 3:
             triple_mem.append((wv, cv & 0xF, cst))
 
     for line in log_lines[:20]:

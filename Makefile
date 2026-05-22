@@ -1,4 +1,4 @@
-.PHONY: test compile compile_synth compile_synth_top synth_kernel test_mem_bridge test_synth_top test_synth_debug
+.PHONY: test compile compile_synth compile_synth_top synth_kernel test_mem_bridge test_synth_top test_synth_debug test_synth_store test_harness_store
 
 # Prefer repo .venv for cocotb (cocotb-config + VPI) without manually activating it.
 # Use an absolute path for $(shell ...) — exported PATH is not always visible to
@@ -94,3 +94,16 @@ test_synth_debug:
 	$(MAKE) compile_synth_top
 	iverilog -Pde1_soc.SLOW_CLK_DIV=2 -o build/sim.vvp -s de1_soc -g2012 build/synth_top.v
 	MODULE=test.test_synth_debug vvp -M $(COCOTB_PREFIX)/cocotb/libs -m libcocotbvpi_icarus build/sim.vvp
+
+# de1_soc store regression: PC=9 STR handshake + mem[16|33..35] (kernel_memories image).
+test_synth_store:
+	$(MAKE) synth_kernel KERNEL=test_diverge_ifelse
+	$(MAKE) compile_synth_top
+	iverilog -Pde1_soc.SLOW_CLK_DIV=2 -o build/sim.vvp -s de1_soc -g2012 build/synth_top.v
+	MODULE=test.test_synth_store vvp -M $(COCOTB_PREFIX)/cocotb/libs -m libcocotbvpi_icarus build/sim.vvp
+
+# sim_harness diverge_ifelse store (bridge + sim_data_ram, no DE1 wrappers).
+test_harness_store:
+	$(MAKE) compile_synth
+	iverilog -o build/sim.vvp -s sim_harness -g2012 build/synth.v
+	MODULE=test.test_harness_store vvp -M $(COCOTB_PREFIX)/cocotb/libs -m libcocotbvpi_icarus build/sim.vvp
