@@ -1,0 +1,21 @@
+# Quartus build artifacts -- do not commit
+db/
+incremental_db/
+output_files/
+
+# Per-run reports and summaries
+*.map.rpt
+*.map.smsg
+*.map.summary
+*.flow.rpt
+*.fit.rpt
+*.fit.smsg
+*.fit.summary
+*.asm.rpt
+*.asm.smsg
+*.sta.rpt
+*.sta.smsg
+*.pin
+
+# Quartus auto-generated project file (re-created by quartus_map on first run)
+# Keeping de1_soc.qpf committed so the project opens cleanly in the Quartus GUI

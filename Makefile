@@ -1,4 +1,11 @@
-.PHONY: test compile compile_synth compile_synth_top synth_kernel test_mem_bridge test_synth_top
+.PHONY: test compile compile_synth compile_synth_top synth_kernel test_mem_bridge test_synth_top \
+        quartus_map quartus_compile
+
+# Path to the Quartus bin64 directory.  Leave unset to rely on PATH, or
+# override on the command line:
+#   make quartus_map QUARTUS_BIN=/path/to/quartus/17.0/quartus/bin64
+QUARTUS_BIN ?=
+_QBIN = $(if $(QUARTUS_BIN),$(QUARTUS_BIN)/,)
 
 export LIBPYTHON_LOC=$(shell cocotb-config --libpython)
 
@@ -71,6 +78,29 @@ synth_kernel:
 		echo "Usage: make synth_kernel KERNEL=<test_name>"; exit 1; \
 	fi
 	python3 -m test.helpers.synth_init $(KERNEL)
+
+# ---------------------------------------------------------------------------
+# Local Quartus synthesis targets (requires Quartus 17 at QUARTUS_BIN).
+# Project files (de1_soc.qpf, de1_soc.qsf) live in quartus/.
+# Pin assignments in quartus/DE1-SoC.qsf are only needed for fit/route.
+# ---------------------------------------------------------------------------
+
+# Analysis & Synthesis only -- fast elaboration check, no place-and-route.
+# Requires synth/kernel_memories.sv (run: make synth_kernel KERNEL=<test>).
+quartus_map:
+	@if [ ! -f synth/kernel_memories.sv ]; then \
+		echo "synth/kernel_memories.sv missing -- run: make synth_kernel KERNEL=<test>"; \
+		exit 1; \
+	fi
+	cd quartus && $(_QBIN)quartus_map de1_soc
+
+# Full compile: A&S → fit → assemble → timing analysis.
+# Fit requires pin assignments; merge DE1-SoC.qsf into the project QSF first
+# or accept Quartus auto-placement (sufficient for timing/area estimates).
+quartus_compile: quartus_map
+	cd quartus && $(_QBIN)quartus_fit de1_soc --part=5CSEMA5F31C6
+	cd quartus && $(_QBIN)quartus_asm de1_soc
+	cd quartus && $(_QBIN)quartus_sta de1_soc
 
 # TODO: Get gtkwave visualizaiton
 

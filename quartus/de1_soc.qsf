@@ -1,0 +1,32 @@
+# Quartus project settings for tiny-spiral local synthesis.
+# Pin assignments live in DE1-SoC.qsf (LabsLand-style virtual peripheral
+# mapping); they are not needed for Analysis & Synthesis (quartus_map) but
+# are required for fit/route.  Run `make quartus_map` to check elaboration,
+# `make quartus_compile` for the full bitstream flow.
+
+set_global_assignment -name FAMILY "Cyclone V"
+set_global_assignment -name DEVICE 5CSEMA5F31C6
+set_global_assignment -name TOP_LEVEL_ENTITY de1_soc
+set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
+
+# GPU RTL
+set_global_assignment -name SYSTEMVERILOG_FILE ../src/alu.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../src/controller.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../src/dcr.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../src/decoder.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../src/divergence.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../src/dispatch.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../src/fetcher.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../src/lsu.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../src/pc.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../src/registers.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../src/scheduler.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../src/core.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../src/gpu.sv
+
+# Synth wrappers / memories (sim_*.sv and sim_harness.sv excluded)
+set_global_assignment -name SYSTEMVERILOG_FILE ../synth/mem_bridge.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../synth/seg7.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../synth/clock_step.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../synth/kernel_memories.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../synth/de1_soc.sv
