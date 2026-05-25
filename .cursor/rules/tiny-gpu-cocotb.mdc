@@ -57,3 +57,46 @@ Match `test/test_matadd.py`, `test/test_matmul.py`, and helpers under `test/help
 ## Makefile integration
 
 - Add `make test_<name>` support via the existing `test_%` rule: place tests at `test/test_<name>.py` with `MODULE=test.test_<name>` expectation.
+
+## How to run a cocotb test
+
+1. **Activate the project venv first** (cocotb, sv2v, and `cocotb-config` live there). From the repo root:
+
+   ```bash
+   source .venv/bin/activate
+   ```
+
+   Without this, `make test_*` fails on `cocotb-config: command not found` or imports `cocotb` from the wrong interpreter.
+
+2. **Run a single test** with the `test_<name>` Makefile rule. The generic `test_%` rule (`Makefile`) compiles `src/*.sv` via `sv2v` into `build/gpu.v`, elaborates with `iverilog -s gpu`, then invokes `vvp` with `MODULE=test.test_<name>`:
+
+   ```bash
+   make test_matadd            # baseline integer add
+   make test_matmul            # baseline matrix multiply
+   make test_diverge_ifelse    # divergence: if/else split
+   make test_diverge_loop      # divergence: per-thread loop counts
+   make test_diverge_nested    # divergence: nested CMPs
+   make test_diverge_leapfrog  # divergence: leapfrog pop (>= test)
+   ```
+
+3. **Tests with non-`gpu` top modules** have explicit Makefile rules — don't rely on the generic `test_%` pattern for these:
+
+   - `make test_mem_bridge` — top is `sim_harness` (gpu + `mem_bridge` + sim ROM/RAM, see `synth/sim_harness.sv`).
+   - `make test_synth_top` — top is `de1_soc`; auto-runs `make synth_kernel KERNEL=test_diverge_ifelse` first to regenerate `synth/kernel_memories.sv`, then compiles with `-Pde1_soc.SLOW_CLK_DIV=2` so `gpu_clk` ticks fast enough for cocotb.
+   - `make test_synth_debug` — same build as `test_synth_top`, runs `test/test_synth_debug.py` (LEDR page 0 vs `data_mem_write_valid`, PC=9 triple-store / LSU masking checks).
+
+4. **Read results.** Two outputs:
+
+   - **stdout** — cocotb prints a PASS/FAIL summary table at the end. Look for `STATUS  PASS` / `STATUS  FAIL` and any `AssertionError` traceback above it.
+   - **`test/logs/log_<YYYYMMDDHHMMSS>.txt`** — `logger.info` / `logger.debug` output (`Completed in N cycles`, per-cycle dumps from `format_cycle`). A new file is created per test run; the latest is `ls -t test/logs/log_*.txt | head -1`.
+
+5. **Run the full regression sweep** before declaring divergence work done (verification protocol gate 8):
+
+   ```bash
+   for t in test_matadd test_matmul test_diverge_ifelse test_diverge_loop \
+            test_diverge_nested test_diverge_leapfrog test_mem_bridge test_synth_top; do
+     make $t 2>&1 | tail -10
+   done
+   ```
+
+   All eight must report `PASS`. matadd must finish in **176 cycles** and matmul in **490 cycles** (regression numbers locked in at the top of `src/divergence.sv`).

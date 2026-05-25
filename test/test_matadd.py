@@ -2,7 +2,7 @@ import cocotb
 from cocotb.triggers import RisingEdge
 from .helpers.setup import setup
 from .helpers.memory import Memory
-from .helpers.format import format_cycle
+from .helpers.format import format_cycle, divergence_state
 from .helpers.logger import logger
 
 @cocotb.test()
@@ -46,6 +46,9 @@ async def test_matadd(dut):
 
     data_memory.display(24)
 
+    # No-false-divergence assertion: matadd is a fully convergent kernel.
+    # active_mask must stay full (all alive threads), stack_ptr must stay 0,
+    # done_mask must stay 0 throughout. Catches accidental divergence triggers.
     cycles = 0
     while dut.done.value != 1:
         data_memory.run()
@@ -53,7 +56,26 @@ async def test_matadd(dut):
 
         await cocotb.triggers.ReadOnly()
         format_cycle(dut, cycles)
-        
+
+        for core in dut.cores:
+            if int(str(dut.thread_count.value), 2) <= core.i.value * dut.THREADS_PER_BLOCK.value:
+                continue
+            ds = divergence_state(core)
+            assert ds["stack_ptr"] == 0, (
+                f"cycle {cycles} core {core.i.value}: unexpected divergence push (stack_ptr={ds['stack_ptr']})"
+            )
+            # Non-divergent kernel: done_mask flips from 0 to all-1s in the single
+            # RET cycle. A partial value means a thread RETed alone -> divergence.
+            assert ds["done_mask"] in (0, ds["alive_full"]), (
+                f"cycle {cycles} core {core.i.value}: partial done_mask={ds['done_mask']:b} "
+                f"(expected 0 or {ds['alive_full']:b})"
+            )
+            # active_mask is 0 in IDLE / after block_done, otherwise must be full.
+            assert ds["active_mask"] in (0, ds["alive_full"]), (
+                f"cycle {cycles} core {core.i.value}: partial active_mask={ds['active_mask']:b} "
+                f"(expected 0 or {ds['alive_full']:b})"
+            )
+
         await RisingEdge(dut.clk)
         cycles += 1
 

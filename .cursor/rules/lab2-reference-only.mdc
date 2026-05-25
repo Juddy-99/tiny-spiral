@@ -1,0 +1,27 @@
+---
+description: reference/lab2 is reference-only; synthesis target is LabsLand DE1-SoC
+alwaysApply: true
+---
+
+# reference/lab2/ is reference-only
+
+## What reference/lab2/ is for
+
+- The `reference/lab2/` directory contains previous lab DE1-SoC code. It is included **only as reference material**, not as project RTL.
+- Read [reference/lab2/DE1_SoC.sv](reference/lab2/DE1_SoC.sv) for the LabsLand DE1-SoC top-level I/O style. Match its baseline port list — `(CLOCK_50, SW[9:0], KEY[3:0], HEX0..HEX5 each [6:0], LEDR[9:0])` — when authoring non-VGA synthesis tops.
+- `reference/lab2/ram32x3.v` and `reference/lab2/ram32x3port2.v` are small Intel `altsyncram` examples. Use them to understand single-port vs separate read/write-address RAM interfaces, but prefer inferred RAM in project-owned code.
+
+## What you must NOT do
+
+- Do not edit anything in `reference/lab2/`.
+- If legacy root-level `lab2/` files are present, treat them as superseded duplicates and do not edit or depend on them.
+- Do not place new synthesis files (top-level, memory, clock-divider, etc.) inside `reference/lab2/`. Put project-owned synthesis code under `synth/`.
+- Do not depend on `reference/lab2/seg7.sv`, `reference/lab2/counter.sv`, `reference/lab2/ram32x3.v`, `reference/lab2/ram32x3port2.v`, `reference/lab2/task1.sv`, or `reference/lab2/task2.sv` from project synthesis code. If you need that functionality, reimplement it under `synth/`.
+- Do not generate or reference pin-assignment / PCF / `.qsf` / `.sdc` files. **LabsLand handles pin mapping automatically** based on the top-level port names.
+
+## Synthesis target: LabsLand
+
+- All files needed for the FPGA build live under `synth/` and are pure SystemVerilog (`.sv`).
+- The user uploads `synth/*.sv` (plus `src/*.sv` or `build/gpu.v`) directly to LabsLand. Keep the upload set small and self-contained.
+- **Do not depend on external data files** (`$readmemh`, `.mif`, `.hex`). Any ROM/RAM contents must be inlined as `initial` blocks in a generated `.sv` file (`synth/kernel_memories.sv`). This is the only portable way to get kernel code/data onto the FPGA via LabsLand's upload flow.
+- Prefer **inferred memory** (`reg [W-1:0] mem [SIZE-1:0];` + an `initial` block) over the `altsyncram` megafunction. Quartus on Cyclone V will infer M10K block RAM, and the result is portable across LabsLand boards without depending on Intel megafunction libraries.

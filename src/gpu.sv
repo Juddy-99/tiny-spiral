@@ -15,7 +15,8 @@ module gpu #(
     parameter PROGRAM_MEM_DATA_BITS = 16,    // Number of bits in program memory value (16 bit instruction)
     parameter PROGRAM_MEM_NUM_CHANNELS = 1,  // Number of concurrent channels for sending requests to program memory
     parameter NUM_CORES = 2,                 // Number of cores to include in this GPU
-    parameter THREADS_PER_BLOCK = 4          // Number of threads to handle per block (determines the compute resources of each core)
+    parameter THREADS_PER_BLOCK = 4,         // Number of threads to handle per block (determines the compute resources of each core)
+    parameter DBG_STACK_W = $clog2(THREADS_PER_BLOCK + 1)
 ) (
     input wire clk,
     input wire reset,
@@ -42,10 +43,32 @@ module gpu #(
     output wire [DATA_MEM_NUM_CHANNELS-1:0] data_mem_write_valid,
     output wire [DATA_MEM_ADDR_BITS-1:0] data_mem_write_address [DATA_MEM_NUM_CHANNELS-1:0],
     output wire [DATA_MEM_DATA_BITS-1:0] data_mem_write_data [DATA_MEM_NUM_CHANNELS-1:0],
-    input wire [DATA_MEM_NUM_CHANNELS-1:0] data_mem_write_ready
+    input wire [DATA_MEM_NUM_CHANNELS-1:0] data_mem_write_ready,
+
+    output wire [PROGRAM_MEM_ADDR_BITS-1:0] dbg_current_pc,
+    output wire [THREADS_PER_BLOCK-1:0] dbg_active_mask,
+    output wire [THREADS_PER_BLOCK-1:0] dbg_done_mask,
+    output wire [DBG_STACK_W-1:0] dbg_stack_ptr,
+
+    // Core 0 only (block runs on core 0 in single-block bring-up)
+    output wire [2:0] dbg_core0_state,
+    output wire [2:0] dbg_core0_fetcher_state,
+    output wire [THREADS_PER_BLOCK-1:0] dbg_core0_lsu_waiting,
+    output wire [THREADS_PER_BLOCK-1:0] dbg_core0_lsu_requesting,
+    output wire dbg_core0_any_lsu_waiting
 );
     // Control
     wire [7:0] thread_count;
+
+    wire [PROGRAM_MEM_ADDR_BITS-1:0] dbg_cur_pc_c [NUM_CORES-1:0];
+    wire [THREADS_PER_BLOCK-1:0] dbg_am_c [NUM_CORES-1:0];
+    wire [THREADS_PER_BLOCK-1:0] dbg_dm_c [NUM_CORES-1:0];
+    wire [DBG_STACK_W-1:0] dbg_sp_c [NUM_CORES-1:0];
+    wire [2:0] dbg_core_state_c [NUM_CORES-1:0];
+    wire [2:0] dbg_fetcher_state_c [NUM_CORES-1:0];
+    wire [THREADS_PER_BLOCK-1:0] dbg_lsu_waiting_c [NUM_CORES-1:0];
+    wire [THREADS_PER_BLOCK-1:0] dbg_lsu_requesting_c [NUM_CORES-1:0];
+    wire dbg_any_lsu_waiting_c [NUM_CORES-1:0];
 
     // Compute Core State
     reg [NUM_CORES-1:0] core_start;
@@ -130,7 +153,7 @@ module gpu #(
         .mem_read_valid(program_mem_read_valid),
         .mem_read_address(program_mem_read_address),
         .mem_read_ready(program_mem_read_ready),
-        .mem_read_data(program_mem_read_data),
+        .mem_read_data(program_mem_read_data)
     );
 
     // Dispatcher
@@ -163,12 +186,17 @@ module gpu #(
             reg [THREADS_PER_BLOCK-1:0] core_lsu_write_valid;
             reg [DATA_MEM_ADDR_BITS-1:0] core_lsu_write_address [THREADS_PER_BLOCK-1:0];
             reg [DATA_MEM_DATA_BITS-1:0] core_lsu_write_data [THREADS_PER_BLOCK-1:0];
-            reg [THREADS_PER_BLOCK-1:0] core_lsu_write_ready;
+            // Combinational (no extra gpu_clk FF): write handshake must reach the LSU in the
+            // same cycle the controller asserts consumer_write_ready. An extra register here
+            // matched cocotb timing in Icarus but can miss the ready window on FPGA (PC stuck on STR).
+            wire [THREADS_PER_BLOCK-1:0] core_lsu_write_ready;
 
             // Pass through signals between LSUs and data memory controller
             genvar j;
-            for (j = 0; j < THREADS_PER_BLOCK; j = j + 1) begin
+            for (j = 0; j < THREADS_PER_BLOCK; j = j + 1) begin : threads
                 localparam lsu_index = i * THREADS_PER_BLOCK + j;
+                assign core_lsu_write_ready[j] = lsu_write_ready[lsu_index];
+
                 always @(posedge clk) begin 
                     lsu_read_valid[lsu_index] <= core_lsu_read_valid[j];
                     lsu_read_address[lsu_index] <= core_lsu_read_address[j];
@@ -179,7 +207,6 @@ module gpu #(
                     
                     core_lsu_read_ready[j] <= lsu_read_ready[lsu_index];
                     core_lsu_read_data[j] <= lsu_read_data[lsu_index];
-                    core_lsu_write_ready[j] <= lsu_write_ready[lsu_index];
                 end
             end
 
@@ -190,6 +217,7 @@ module gpu #(
                 .PROGRAM_MEM_ADDR_BITS(PROGRAM_MEM_ADDR_BITS),
                 .PROGRAM_MEM_DATA_BITS(PROGRAM_MEM_DATA_BITS),
                 .THREADS_PER_BLOCK(THREADS_PER_BLOCK),
+                .STACK_DBG_W(DBG_STACK_W)
             ) core_instance (
                 .clk(clk),
                 .reset(core_reset[i]),
@@ -210,8 +238,29 @@ module gpu #(
                 .data_mem_write_valid(core_lsu_write_valid),
                 .data_mem_write_address(core_lsu_write_address),
                 .data_mem_write_data(core_lsu_write_data),
-                .data_mem_write_ready(core_lsu_write_ready)
+                .data_mem_write_ready(core_lsu_write_ready),
+
+                .dbg_current_pc(dbg_cur_pc_c[i]),
+                .dbg_active_mask(dbg_am_c[i]),
+                .dbg_done_mask(dbg_dm_c[i]),
+                .dbg_stack_ptr(dbg_sp_c[i]),
+
+                .dbg_core_state(dbg_core_state_c[i]),
+                .dbg_fetcher_state(dbg_fetcher_state_c[i]),
+                .dbg_lsu_waiting(dbg_lsu_waiting_c[i]),
+                .dbg_lsu_requesting(dbg_lsu_requesting_c[i]),
+                .dbg_any_lsu_waiting(dbg_any_lsu_waiting_c[i])
             );
         end
     endgenerate
+
+    assign dbg_current_pc = dbg_cur_pc_c[0];
+    assign dbg_active_mask = dbg_am_c[0];
+    assign dbg_done_mask = dbg_dm_c[0];
+    assign dbg_stack_ptr = dbg_sp_c[0];
+    assign dbg_core0_state = dbg_core_state_c[0];
+    assign dbg_core0_fetcher_state = dbg_fetcher_state_c[0];
+    assign dbg_core0_lsu_waiting = dbg_lsu_waiting_c[0];
+    assign dbg_core0_lsu_requesting = dbg_lsu_requesting_c[0];
+    assign dbg_core0_any_lsu_waiting = dbg_any_lsu_waiting_c[0];
 endmodule

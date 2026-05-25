@@ -1,0 +1,33 @@
+---
+description: reference/example_frame_buffer is reference-only for DE1-SoC VGA display integration
+alwaysApply: true
+---
+
+# reference/example_frame_buffer/ is reference-only
+
+## What it is for
+
+- The `reference/example_frame_buffer/` directory holds a **working DE1-SoC VGA example** from another project. Use it as the primary reference when designing framebuffer memory, VGA timing, and pixel write/read plumbing for this repo.
+- Read [reference/example_frame_buffer/VGA_framebuffer.sv](reference/example_frame_buffer/VGA_framebuffer.sv) before proposing or implementing display-related RTL. It documents:
+  - 640×480 active region, 50 MHz `clk50`, 25 MHz effective pixel clock (`VGA_CLK = hcount[0]`)
+  - Standard VGA sync/blank timing (`HACTIVE`, `VACTIVE`, porch/sync parameters)
+  - A **software-style pixel write port**: `x`, `y`, `pixel_color`, `pixel_write`
+  - Framebuffer indexing: `write_address = x + (y << 9) + (y << 7)` (i.e. `x + y * 640`), 307200 one-bit pixels
+  - Scan-out: `read_address` from `hcount`/`vcount`, RGB driven from stored pixel data
+
+## Project direction (do not lose sight of this)
+
+- **End goal**: store vertices (or raster parameters) in memory, run a GPU kernel to compute covered pixels, write those pixels into a framebuffer, and show the result on the DE1-SoC VGA output (e.g. a filled triangle).
+- When integrating with tiny-gpu, plan for: GPU LSU (or dedicated port) → framebuffer writes using the same coordinate/write semantics as the example; VGA module continues to scan out independently.
+
+## What you must NOT do
+
+- **Do not edit anything under `reference/example_frame_buffer/`** — copy patterns or reimplement under `synth/` (or other project-owned paths), do not modify the example in place.
+- If legacy root-level `example_frame_buffer/` files are present, treat them as superseded duplicates and do not edit or depend on them.
+- Do not add synthesis upload dependencies that `#include` or compile the example file directly unless the user explicitly asks; prefer a project-owned wrapper in `synth/` that follows the example’s interface and timing.
+- Match [reference/lab2/DE1_SoC.sv](reference/lab2/DE1_SoC.sv) top-level port style for LabsLand when building the synthesis top; add VGA pins per the example’s outputs (`VGA_R/G/B`, `VGA_CLK`, `VGA_HS`, `VGA_VS`, `VGA_BLANK_n`, `VGA_SYNC_n`) when targeting display output.
+
+## Implementation notes when adapting the example
+
+- The example uses `logic` and `always_ff`; new code in this repo should still follow [tiny-gpu-project.mdc](tiny-gpu-project.mdc) toolchain rules (`reg`/`wire`, `always @(posedge clk)`, sv2v-friendly constructs) unless you verify sv2v/simulation with the chosen style.
+- Framebuffer storage in the example is a flat bit array; production integration may use wider color depth or dual-port RAM inferred for GPU writes + VGA reads — use the example for **timing and write-address math**, not as the only valid memory organization.

@@ -1,0 +1,19 @@
+---
+description: reference/ RAM and memory-IP examples are read-only design references
+alwaysApply: true
+---
+
+# reference/ memory examples are reference-only
+
+## Directory map
+
+- `reference/example_frame_buffer/` contains the working VGA timing + one-bit framebuffer example. Use it for display timing, pixel-coordinate writes, and scanout behavior.
+- `reference/lab2/` contains small memory examples: inferred array RAM in `task2.sv`, Intel single-port RAM in `ram32x3.v`, and Intel separate read/write-address RAM in `ram32x3port2.v`.
+- `reference/rammaybe_and_ramport/` contains Quartus-generated memory initializer/IP metadata. Treat it as an example of vendor-generated memory support files, not as reusable project RTL.
+
+## How to use these references
+
+- Do not edit files under `reference/`; copy patterns into project-owned files under `synth/` or `src/` when needed.
+- For DE1-SoC framebuffer work, prefer the VGA timing and address math from `reference/example_frame_buffer/VGA_framebuffer.sv`, but use project-owned inferred memory for the implemented framebuffer.
+- If many GPU threads can write pixels, add arbitration or banking in project-owned RTL. The reference memories do not provide eight independent framebuffer write ports.
+- Avoid depending on Quartus `.qip`, `.mif`, `.bsf`, `.cmp`, `.inc`, or `.cnx` files in the LabsLand upload flow unless the user explicitly requests a vendor-IP experiment.

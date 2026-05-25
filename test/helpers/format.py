@@ -94,6 +94,27 @@ def format_registers(registers: List[str]) -> str:
     formatted_registers.reverse()
     return ', '.join(formatted_registers)
 
+def _bin_to_int(bv) -> int:
+    s = str(bv)
+    return int(s, 2) if s and all(c in "01" for c in s) else 0
+
+
+def divergence_state(core) -> dict:
+    """Snapshot of the divergence unit for one core. Used by format_cycle and by
+    the no-false-divergence assertion in test_matadd / test_matmul."""
+    div = core.core_instance.divergence_instance
+    threads_per_block = int(core.core_instance.THREADS_PER_BLOCK)
+    return {
+        "active_mask": _bin_to_int(div.active_mask.value),
+        "done_mask": _bin_to_int(div.done_mask.value),
+        "stack_ptr": _bin_to_int(div.stack_ptr.value),
+        "stack_top_pc": _bin_to_int(div.stack_top_pc_dbg.value),
+        "stack_top_mask": _bin_to_int(div.stack_top_mask_dbg.value),
+        "block_done": _bin_to_int(div.block_done.value),
+        "alive_full": (1 << threads_per_block) - 1,
+    }
+
+
 def format_cycle(dut, cycle_id: int, thread_id: Optional[int] = None):
     logger.debug(f"\n================================== Cycle {cycle_id} ==================================")
 
@@ -103,6 +124,14 @@ def format_cycle(dut, cycle_id: int, thread_id: Optional[int] = None):
             continue
 
         logger.debug(f"\n+--------------------- Core {core.i.value} ---------------------+")
+
+        ds = divergence_state(core)
+        logger.debug(
+            f"Divergence: active_mask={ds['active_mask']:0{int(core.core_instance.THREADS_PER_BLOCK)}b} "
+            f"done_mask={ds['done_mask']:0{int(core.core_instance.THREADS_PER_BLOCK)}b} "
+            f"stack_ptr={ds['stack_ptr']} "
+            f"stack_top=(pc={ds['stack_top_pc']}, mask={ds['stack_top_mask']:0{int(core.core_instance.THREADS_PER_BLOCK)}b})"
+        )
 
         instruction = str(core.core_instance.instruction.value)
         for thread in core.core_instance.threads:

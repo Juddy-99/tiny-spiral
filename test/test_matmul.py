@@ -2,7 +2,7 @@ import cocotb
 from cocotb.triggers import RisingEdge
 from .helpers.setup import setup
 from .helpers.memory import Memory
-from .helpers.format import format_cycle
+from .helpers.format import format_cycle, divergence_state
 from .helpers.logger import logger
 
 @cocotb.test()
@@ -62,6 +62,8 @@ async def test_matadd(dut):
 
     data_memory.display(12)
 
+    # No-false-divergence assertion: matmul's BR is convergent (all 4 threads
+    # have identical R9/R2 each iteration), so divergence state stays trivial.
     cycles = 0
     while dut.done.value != 1:
         data_memory.run()
@@ -69,7 +71,23 @@ async def test_matadd(dut):
 
         await cocotb.triggers.ReadOnly()
         format_cycle(dut, cycles, thread_id=1)
-        
+
+        for core in dut.cores:
+            if int(str(dut.thread_count.value), 2) <= core.i.value * dut.THREADS_PER_BLOCK.value:
+                continue
+            ds = divergence_state(core)
+            assert ds["stack_ptr"] == 0, (
+                f"cycle {cycles} core {core.i.value}: unexpected divergence push (stack_ptr={ds['stack_ptr']})"
+            )
+            assert ds["done_mask"] in (0, ds["alive_full"]), (
+                f"cycle {cycles} core {core.i.value}: partial done_mask={ds['done_mask']:b} "
+                f"(expected 0 or {ds['alive_full']:b})"
+            )
+            assert ds["active_mask"] in (0, ds["alive_full"]), (
+                f"cycle {cycles} core {core.i.value}: partial active_mask={ds['active_mask']:b} "
+                f"(expected 0 or {ds['alive_full']:b})"
+            )
+
         await RisingEdge(dut.clk)
         cycles += 1
 
