@@ -1,20 +1,22 @@
 ---
-description: lab2 directory is reference-only; synthesis target is LabsLand DE1-SoC
+description: reference/lab2 is reference-only; synthesis target is LabsLand DE1-SoC
 alwaysApply: true
 ---
 
-# lab2/ is reference-only
+# reference/lab2/ is reference-only
 
-## What lab2/ is for
+## What reference/lab2/ is for
 
-- The `lab2/` directory contains a previous lab's DE1-SoC code. It is included **only as a reference for the top-level I/O signature** the LabsLand DE1-SoC expects.
-- The only file in `lab2/` worth reading is [lab2/DE1_SoC.sv](lab2/DE1_SoC.sv). Match its port list — `(CLOCK_50, SW[9:0], KEY[3:0], HEX0..HEX5 each [6:0], LEDR[9:0])` — when authoring the project's synthesis top.
+- The `reference/lab2/` directory contains previous lab DE1-SoC code. It is included **only as reference material**, not as project RTL.
+- Read [reference/lab2/DE1_SoC.sv](reference/lab2/DE1_SoC.sv) for the LabsLand DE1-SoC top-level I/O style. Match its baseline port list — `(CLOCK_50, SW[9:0], KEY[3:0], HEX0..HEX5 each [6:0], LEDR[9:0])` — when authoring non-VGA synthesis tops.
+- `reference/lab2/ram32x3.v` and `reference/lab2/ram32x3port2.v` are small Intel `altsyncram` examples. Use them to understand single-port vs separate read/write-address RAM interfaces, but prefer inferred RAM in project-owned code.
 
 ## What you must NOT do
 
-- Do not edit anything in `lab2/`.
-- Do not place new synthesis files (top-level, memory, clock-divider, etc.) inside `lab2/`. Put them in a separate directory at the repo root (`synth/`).
-- Do not depend on `lab2/seg7.sv`, `lab2/counter.sv`, `lab2/ram32x3.v`, `lab2/ram32x3port2.v`, `lab2/task1.sv`, or `lab2/task2.sv` from project synthesis code. If you need that functionality, reimplement it under `synth/`.
+- Do not edit anything in `reference/lab2/`.
+- If legacy root-level `lab2/` files are present, treat them as superseded duplicates and do not edit or depend on them.
+- Do not place new synthesis files (top-level, memory, clock-divider, etc.) inside `reference/lab2/`. Put project-owned synthesis code under `synth/`.
+- Do not depend on `reference/lab2/seg7.sv`, `reference/lab2/counter.sv`, `reference/lab2/ram32x3.v`, `reference/lab2/ram32x3port2.v`, `reference/lab2/task1.sv`, or `reference/lab2/task2.sv` from project synthesis code. If you need that functionality, reimplement it under `synth/`.
 - Do not generate or reference pin-assignment / PCF / `.qsf` / `.sdc` files. **LabsLand handles pin mapping automatically** based on the top-level port names.
 
 ## Synthesis target: LabsLand

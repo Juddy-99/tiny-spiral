@@ -1,14 +1,14 @@
 ---
-description: example_frame_buffer/ is reference-only for DE1-SoC VGA display integration
+description: reference/example_frame_buffer is reference-only for DE1-SoC VGA display integration
 alwaysApply: true
 ---
 
-# example_frame_buffer/ is reference-only
+# reference/example_frame_buffer/ is reference-only
 
 ## What it is for
 
-- The `example_frame_buffer/` directory holds a **working DE1-SoC VGA example** from another project. Use it as the primary reference when designing framebuffer memory, VGA timing, and pixel write/read plumbing for this repo.
-- Read [example_frame_buffer/VGA_framebuffer.sv](example_frame_buffer/VGA_framebuffer.sv) before proposing or implementing display-related RTL. It documents:
+- The `reference/example_frame_buffer/` directory holds a **working DE1-SoC VGA example** from another project. Use it as the primary reference when designing framebuffer memory, VGA timing, and pixel write/read plumbing for this repo.
+- Read [reference/example_frame_buffer/VGA_framebuffer.sv](reference/example_frame_buffer/VGA_framebuffer.sv) before proposing or implementing display-related RTL. It documents:
   - 640×480 active region, 50 MHz `clk50`, 25 MHz effective pixel clock (`VGA_CLK = hcount[0]`)
   - Standard VGA sync/blank timing (`HACTIVE`, `VACTIVE`, porch/sync parameters)
   - A **software-style pixel write port**: `x`, `y`, `pixel_color`, `pixel_write`
@@ -22,9 +22,10 @@ alwaysApply: true
 
 ## What you must NOT do
 
-- **Do not edit anything under `example_frame_buffer/`** — treat it like `lab2/`: copy patterns or reimplement under `synth/` (or other project-owned paths), do not modify the example in place.
+- **Do not edit anything under `reference/example_frame_buffer/`** — copy patterns or reimplement under `synth/` (or other project-owned paths), do not modify the example in place.
+- If legacy root-level `example_frame_buffer/` files are present, treat them as superseded duplicates and do not edit or depend on them.
 - Do not add synthesis upload dependencies that `#include` or compile the example file directly unless the user explicitly asks; prefer a project-owned wrapper in `synth/` that follows the example’s interface and timing.
-- Match [lab2/DE1_SoC.sv](lab2/DE1_SoC.sv) top-level port expectations for LabsLand when building the synthesis top; wire VGA pins per the example’s outputs (`VGA_R/G/B`, `VGA_CLK`, `VGA_HS`, `VGA_VS`, `VGA_BLANK_n`, `VGA_SYNC_n`).
+- Match [reference/lab2/DE1_SoC.sv](reference/lab2/DE1_SoC.sv) top-level port style for LabsLand when building the synthesis top; add VGA pins per the example’s outputs (`VGA_R/G/B`, `VGA_CLK`, `VGA_HS`, `VGA_VS`, `VGA_BLANK_n`, `VGA_SYNC_n`) when targeting display output.
 
 ## Implementation notes when adapting the example
 
