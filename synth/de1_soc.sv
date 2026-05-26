@@ -56,7 +56,22 @@ module de1_soc #(
     output wire [6:0]  HEX3,
     output wire [6:0]  HEX4,
     output wire [6:0]  HEX5,
-    output wire [9:0]  LEDR
+    output wire [9:0]  LEDR,
+
+    // VGA outputs (LabsLand pin-maps by name). Driven by VGA_framebuffer in the
+    // CLOCK_50 domain. The GPU writes pixels through the STRFB opcode and a
+    // dedicated framebuffer controller; this top-level synchronizes that write
+    // pulse across the gpu_clk -> CLOCK_50 boundary. Reachable region is the
+    // top-left 256x256 of the 640x480 screen because gpu_fb_x/y are 8-bit
+    // (matches the rest of the data-path width).
+    output wire [7:0]  VGA_R,
+    output wire [7:0]  VGA_G,
+    output wire [7:0]  VGA_B,
+    output wire        VGA_CLK,
+    output wire        VGA_HS,
+    output wire        VGA_VS,
+    output wire        VGA_BLANK_N,
+    output wire        VGA_SYNC_N
 );
     // Active-low buttons -> active-high internal signals.
     wire reset_btn = ~KEY[3];
@@ -151,6 +166,19 @@ module de1_soc #(
     wire [7:0] data_mem_write_data [DATA_MEM_NUM_CHANNELS-1:0];
     wire [DATA_MEM_NUM_CHANNELS-1:0] data_mem_write_ready;
 
+    // GPU-side framebuffer interface. Lives in the gpu_clk domain. The
+    // gpu_fb_write_ready ack is combinational from gpu_fb_write_valid so the
+    // LSU completes deterministically in one gpu_clk cycle. The slow
+    // gpu_clk also guarantees gpu_fb_write_valid is held high across many
+    // CLOCK_50 cycles, which makes the CDC pulse capture race-free.
+    wire        gpu_fb_write_valid;
+    wire [7:0]  gpu_fb_x;
+    wire [7:0]  gpu_fb_y;
+    wire [7:0]  gpu_fb_data;
+    wire        gpu_fb_color;
+    wire        gpu_fb_write_ready;
+    assign gpu_fb_write_ready = gpu_fb_write_valid;
+
     gpu #(
         .DATA_MEM_ADDR_BITS(8),
         .DATA_MEM_DATA_BITS(8),
@@ -179,6 +207,13 @@ module de1_soc #(
         .data_mem_write_address(data_mem_write_address),
         .data_mem_write_data(data_mem_write_data),
         .data_mem_write_ready(data_mem_write_ready),
+
+        .fb_write_valid(gpu_fb_write_valid),
+        .fb_x(gpu_fb_x),
+        .fb_y(gpu_fb_y),
+        .fb_data(gpu_fb_data),
+        .fb_color(gpu_fb_color),
+        .fb_write_ready(gpu_fb_write_ready),
 
         .dbg_current_pc(cur_pc),
         .dbg_active_mask(active_mask),
@@ -362,4 +397,44 @@ module de1_soc #(
         : ledr_debug_p3;
 
     assign LEDR = SW[8] ? ledr_debug_sel : ledr_normal;
+
+    // ---- VGA framebuffer + gpu_clk -> CLOCK_50 CDC ----
+    // gpu_fb_write_valid is asserted for at least one full gpu_clk period
+    // (gpu_clk is always slower than CLOCK_50). Sync through a 3-FF chain on
+    // CLOCK_50 and edge-detect to produce a single-CLOCK_50-cycle pixel_write
+    // pulse. Coordinates and color are sampled from the GPU side (also
+    // gpu_clk domain) but their values are stable for the whole gpu_clk cycle
+    // so they meet the CLOCK_50 sample with timing slack.
+    reg fb_valid_sync_0, fb_valid_sync_1, fb_valid_sync_2;
+    always @(posedge CLOCK_50 or posedge reset_btn) begin
+        if (reset_btn) begin
+            fb_valid_sync_0 <= 1'b0;
+            fb_valid_sync_1 <= 1'b0;
+            fb_valid_sync_2 <= 1'b0;
+        end else begin
+            fb_valid_sync_0 <= gpu_fb_write_valid;
+            fb_valid_sync_1 <= fb_valid_sync_0;
+            fb_valid_sync_2 <= fb_valid_sync_1;
+        end
+    end
+
+    // Rising edge of the synchronized valid -> one-CLOCK_50-cycle pixel_write.
+    wire fb_pixel_write = fb_valid_sync_1 & ~fb_valid_sync_2;
+
+    VGA_framebuffer fb_instance (
+        .clk50      (CLOCK_50),
+        .reset      (reset_btn),
+        .x          ({3'b0, gpu_fb_x}),
+        .y          ({3'b0, gpu_fb_y}),
+        .pixel_color(gpu_fb_color),
+        .pixel_write(fb_pixel_write),
+        .VGA_R      (VGA_R),
+        .VGA_G      (VGA_G),
+        .VGA_B      (VGA_B),
+        .VGA_CLK    (VGA_CLK),
+        .VGA_HS     (VGA_HS),
+        .VGA_VS     (VGA_VS),
+        .VGA_BLANK_n(VGA_BLANK_N),
+        .VGA_SYNC_n (VGA_SYNC_N)
+    );
 endmodule

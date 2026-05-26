@@ -41,10 +41,10 @@ module program_rom #(
         mem[ 10] = 16'h1e0d;
         mem[ 11] = 16'h3635;
         mem[ 12] = 16'h8061;
-        mem[ 13] = 16'hf000;
-        mem[ 14] = 16'h0000;
-        mem[ 15] = 16'h0000;
-        mem[ 16] = 16'h0000;
+        mem[ 13] = 16'h9801; // Store pixel data (1) to r8
+        mem[ 14] = 16'h9980; // Store coordinate 128, used for x and y, to r9
+        mem[ 15] = 16'hc998; // STRFB r9, r9, r8
+        mem[ 16] = 16'hf000;
         mem[ 17] = 16'h0000;
         mem[ 18] = 16'h0000;
         mem[ 19] = 16'h0000;

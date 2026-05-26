@@ -34,8 +34,13 @@ module registers #(
     input reg [DATA_BITS-1:0] lsu_out,
 
     // Registers
+    // rd_val mirrors the rs/rt read port pattern but reads decoded_rd_address.
+    // STRFB needs three register operands (x, y, color) where the existing
+    // (rs, rt) only expose two, so we surface a third register-file read here
+    // and latch it on REQUEST so the LSU can consume it on the next cycle.
     output reg [7:0] rs,
-    output reg [7:0] rt
+    output reg [7:0] rt,
+    output reg [7:0] rd_val
 );
     localparam ARITHMETIC = 2'b00,
         MEMORY = 2'b01,
@@ -46,9 +51,10 @@ module registers #(
 
     always @(posedge clk) begin
         if (reset) begin
-            // Empty rs, rt
+            // Empty rs, rt, rd_val
             rs <= 0;
             rt <= 0;
+            rd_val <= 0;
             // Initialize all free registers
             registers[0] <= 8'b0;
             registers[1] <= 8'b0;
@@ -71,10 +77,13 @@ module registers #(
             // [Bad Solution] Shouldn't need to set this every cycle
             registers[13] <= block_id; // Update the block_id when a new block is issued from dispatcher
             
-            // Fill rs/rt when core_state = REQUEST
+            // Fill rs/rt/rd_val when core_state = REQUEST. rd_val is read-only
+            // -- STRFB only consumes it, never writes through it. R13..R15 are
+            // still legal sources (e.g. STRFB %threadIdx, Rs, Rt).
             if (core_state == 3'b011) begin 
                 rs <= registers[decoded_rs_address];
                 rt <= registers[decoded_rt_address];
+                rd_val <= registers[decoded_rd_address];
             end
 
             // Store rd when core_state = UPDATE

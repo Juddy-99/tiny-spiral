@@ -45,6 +45,18 @@ module gpu #(
     output wire [DATA_MEM_DATA_BITS-1:0] data_mem_write_data [DATA_MEM_NUM_CHANNELS-1:0],
     input wire [DATA_MEM_NUM_CHANNELS-1:0] data_mem_write_ready,
 
+    // Framebuffer Write Port (single 1-channel write-only interface). All
+    // per-thread STRFB requests are serialized through a dedicated controller
+    // and presented here. Pack: address = {fb_y, fb_x} (16b), data =
+    // {fb_color, fb_data} (9b). Coordinates are 8 bits today (reachable
+    // window is 256x256 of the 640x480 VGA screen).
+    output wire fb_write_valid,
+    output wire [7:0] fb_x,
+    output wire [7:0] fb_y,
+    output wire [7:0] fb_data,
+    output wire fb_color,
+    input wire fb_write_ready,
+
     output wire [PROGRAM_MEM_ADDR_BITS-1:0] dbg_current_pc,
     output wire [THREADS_PER_BLOCK-1:0] dbg_active_mask,
     output wire [THREADS_PER_BLOCK-1:0] dbg_done_mask,
@@ -94,6 +106,39 @@ module gpu #(
     reg [PROGRAM_MEM_ADDR_BITS-1:0] fetcher_read_address [NUM_FETCHERS-1:0];
     reg [NUM_FETCHERS-1:0] fetcher_read_ready;
     reg [PROGRAM_MEM_DATA_BITS-1:0] fetcher_read_data [NUM_FETCHERS-1:0];
+
+    // LSU <> Framebuffer Controller Channels
+    // Address = {fb_y, fb_x} (16b), Data = {fb_color, fb_data} (9b). One
+    // controller channel serializes all NUM_LSUS write requests. Reads are
+    // tied off so the controller only ever takes the write path.
+    localparam FB_ADDR_BITS = 16;
+    localparam FB_DATA_BITS = 9;
+    reg [NUM_LSUS-1:0] lsu_fb_write_valid;
+    reg [FB_ADDR_BITS-1:0] lsu_fb_write_address [NUM_LSUS-1:0];
+    reg [FB_DATA_BITS-1:0] lsu_fb_write_data [NUM_LSUS-1:0];
+    wire [NUM_LSUS-1:0] lsu_fb_write_ready;
+    wire [NUM_LSUS-1:0] lsu_fb_read_valid_tie;
+    wire [FB_ADDR_BITS-1:0] lsu_fb_read_address_tie [NUM_LSUS-1:0];
+    wire [NUM_LSUS-1:0] fb_read_ready_unused;
+    wire [FB_DATA_BITS-1:0] fb_read_data_unused [NUM_LSUS-1:0];
+    wire fb_mem_read_valid_unused;
+    wire [FB_ADDR_BITS-1:0] fb_mem_read_address_unused;
+    wire fb_mem_read_ready_tie;
+    wire [FB_DATA_BITS-1:0] fb_mem_read_data_tie;
+    wire fb_mem_write_valid_w;
+    wire [FB_ADDR_BITS-1:0] fb_mem_write_address_w;
+    wire [FB_DATA_BITS-1:0] fb_mem_write_data_w;
+
+    assign lsu_fb_read_valid_tie = {NUM_LSUS{1'b0}};
+    assign fb_mem_read_ready_tie = 1'b0;
+    assign fb_mem_read_data_tie  = {FB_DATA_BITS{1'b0}};
+
+    genvar fbi;
+    generate
+        for (fbi = 0; fbi < NUM_LSUS; fbi = fbi + 1) begin : fb_read_tie
+            assign lsu_fb_read_address_tie[fbi] = {FB_ADDR_BITS{1'b0}};
+        end
+    endgenerate
     
     // Device Control Register
     dcr dcr_instance (
@@ -156,6 +201,64 @@ module gpu #(
         .mem_read_data(program_mem_read_data)
     );
 
+    // Framebuffer Controller. Serializes per-LSU STRFB requests onto a single
+    // 1-channel write port exposed at the GPU top. Reads are tied off so the
+    // controller only ever exercises the write half of its state machine.
+    wire [0:0] fb_mem_write_valid_ch;
+    wire [FB_ADDR_BITS-1:0] fb_mem_write_address_ch [0:0];
+    wire [FB_DATA_BITS-1:0] fb_mem_write_data_ch [0:0];
+    wire [0:0] fb_mem_write_ready_ch;
+    wire [0:0] fb_mem_read_valid_ch;
+    wire [FB_ADDR_BITS-1:0] fb_mem_read_address_ch [0:0];
+    wire [0:0] fb_mem_read_ready_ch;
+    wire [FB_DATA_BITS-1:0] fb_mem_read_data_ch [0:0];
+
+    assign fb_mem_read_ready_ch[0] = fb_mem_read_ready_tie;
+    assign fb_mem_read_data_ch[0]  = fb_mem_read_data_tie;
+    assign fb_mem_read_valid_unused   = fb_mem_read_valid_ch[0];
+    assign fb_mem_read_address_unused = fb_mem_read_address_ch[0];
+    assign fb_mem_write_valid_w   = fb_mem_write_valid_ch[0];
+    assign fb_mem_write_address_w = fb_mem_write_address_ch[0];
+    assign fb_mem_write_data_w    = fb_mem_write_data_ch[0];
+    assign fb_mem_write_ready_ch[0] = fb_write_ready;
+
+    controller #(
+        .ADDR_BITS(FB_ADDR_BITS),
+        .DATA_BITS(FB_DATA_BITS),
+        .NUM_CONSUMERS(NUM_LSUS),
+        .NUM_CHANNELS(1),
+        .WRITE_ENABLE(1)
+    ) fb_controller (
+        .clk(clk),
+        .reset(reset),
+
+        .consumer_read_valid(lsu_fb_read_valid_tie),
+        .consumer_read_address(lsu_fb_read_address_tie),
+        .consumer_read_ready(fb_read_ready_unused),
+        .consumer_read_data(fb_read_data_unused),
+        .consumer_write_valid(lsu_fb_write_valid),
+        .consumer_write_address(lsu_fb_write_address),
+        .consumer_write_data(lsu_fb_write_data),
+        .consumer_write_ready(lsu_fb_write_ready),
+
+        .mem_read_valid(fb_mem_read_valid_ch),
+        .mem_read_address(fb_mem_read_address_ch),
+        .mem_read_ready(fb_mem_read_ready_ch),
+        .mem_read_data(fb_mem_read_data_ch),
+        .mem_write_valid(fb_mem_write_valid_ch),
+        .mem_write_address(fb_mem_write_address_ch),
+        .mem_write_data(fb_mem_write_data_ch),
+        .mem_write_ready(fb_mem_write_ready_ch)
+    );
+
+    // Unpack the controller's single-channel output back into the top-level
+    // framebuffer signals.
+    assign fb_write_valid = fb_mem_write_valid_w;
+    assign fb_x           = fb_mem_write_address_w[7:0];
+    assign fb_y           = fb_mem_write_address_w[15:8];
+    assign fb_data        = fb_mem_write_data_w[7:0];
+    assign fb_color       = fb_mem_write_data_w[8];
+
     // Dispatcher
     dispatch #(
         .NUM_CORES(NUM_CORES),
@@ -191,11 +294,22 @@ module gpu #(
             // matched cocotb timing in Icarus but can miss the ready window on FPGA (PC stuck on STR).
             wire [THREADS_PER_BLOCK-1:0] core_lsu_write_ready;
 
+            // Per-core framebuffer write bus. Mirrors the data path: registered
+            // valid/address/data on the way out, combinational ready on the way
+            // back so the LSU sees the controller's write_ready in the same cycle.
+            wire [THREADS_PER_BLOCK-1:0] core_fb_write_valid;
+            wire [7:0] core_fb_x [THREADS_PER_BLOCK-1:0];
+            wire [7:0] core_fb_y [THREADS_PER_BLOCK-1:0];
+            wire [7:0] core_fb_data [THREADS_PER_BLOCK-1:0];
+            wire [THREADS_PER_BLOCK-1:0] core_fb_color;
+            wire [THREADS_PER_BLOCK-1:0] core_fb_write_ready;
+
             // Pass through signals between LSUs and data memory controller
             genvar j;
             for (j = 0; j < THREADS_PER_BLOCK; j = j + 1) begin : threads
                 localparam lsu_index = i * THREADS_PER_BLOCK + j;
                 assign core_lsu_write_ready[j] = lsu_write_ready[lsu_index];
+                assign core_fb_write_ready[j]  = lsu_fb_write_ready[lsu_index];
 
                 always @(posedge clk) begin 
                     lsu_read_valid[lsu_index] <= core_lsu_read_valid[j];
@@ -204,7 +318,11 @@ module gpu #(
                     lsu_write_valid[lsu_index] <= core_lsu_write_valid[j];
                     lsu_write_address[lsu_index] <= core_lsu_write_address[j];
                     lsu_write_data[lsu_index] <= core_lsu_write_data[j];
-                    
+
+                    lsu_fb_write_valid[lsu_index]   <= core_fb_write_valid[j];
+                    lsu_fb_write_address[lsu_index] <= {core_fb_y[j], core_fb_x[j]};
+                    lsu_fb_write_data[lsu_index]    <= {core_fb_color[j], core_fb_data[j]};
+
                     core_lsu_read_ready[j] <= lsu_read_ready[lsu_index];
                     core_lsu_read_data[j] <= lsu_read_data[lsu_index];
                 end
@@ -239,6 +357,13 @@ module gpu #(
                 .data_mem_write_address(core_lsu_write_address),
                 .data_mem_write_data(core_lsu_write_data),
                 .data_mem_write_ready(core_lsu_write_ready),
+
+                .fb_write_valid(core_fb_write_valid),
+                .fb_x(core_fb_x),
+                .fb_y(core_fb_y),
+                .fb_data(core_fb_data),
+                .fb_color(core_fb_color),
+                .fb_write_ready(core_fb_write_ready),
 
                 .dbg_current_pc(dbg_cur_pc_c[i]),
                 .dbg_active_mask(dbg_am_c[i]),

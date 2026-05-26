@@ -22,6 +22,7 @@ module decoder (
     output reg decoded_reg_write_enable,           // Enable writing to a register
     output reg decoded_mem_read_enable,            // Enable reading from memory
     output reg decoded_mem_write_enable,           // Enable writing to memory
+    output reg decoded_fb_write_enable,            // Enable writing a pixel to the framebuffer (STRFB)
     output reg decoded_nzp_write_enable,           // Enable writing to NZP register
     output reg [1:0] decoded_reg_input_mux,        // Select input to register
     output reg [1:0] decoded_alu_arithmetic_mux,   // Select arithmetic operation
@@ -41,6 +42,7 @@ module decoder (
         LDR = 4'b0111,
         STR = 4'b1000,
         CONST = 4'b1001,
+        STRFB = 4'b1100,
         RET = 4'b1111;
 
     always @(posedge clk) begin 
@@ -53,6 +55,7 @@ module decoder (
             decoded_reg_write_enable <= 0;
             decoded_mem_read_enable <= 0;
             decoded_mem_write_enable <= 0;
+            decoded_fb_write_enable <= 0;
             decoded_nzp_write_enable <= 0;
             decoded_reg_input_mux <= 0;
             decoded_alu_arithmetic_mux <= 0;
@@ -73,6 +76,7 @@ module decoder (
                 decoded_reg_write_enable <= 0;
                 decoded_mem_read_enable <= 0;
                 decoded_mem_write_enable <= 0;
+                decoded_fb_write_enable <= 0;
                 decoded_nzp_write_enable <= 0;
                 decoded_reg_input_mux <= 0;
                 decoded_alu_arithmetic_mux <= 0;
@@ -123,6 +127,12 @@ module decoder (
                     CONST: begin 
                         decoded_reg_write_enable <= 1;
                         decoded_reg_input_mux <= 2'b10;
+                    end
+                    STRFB: begin
+                        // STRFB Rd, Rs, Rt: write pixel (Rd=x, Rs=y, Rt=color/data)
+                        // to the framebuffer. No register / memory / NZP side
+                        // effects -- the LSU drives a dedicated FB write port.
+                        decoded_fb_write_enable <= 1;
                     end
                     RET: begin 
                         decoded_ret <= 1;

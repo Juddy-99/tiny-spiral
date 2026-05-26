@@ -20,7 +20,7 @@ async def run_kernel(dut, program_memory, data_memory):
         format_cycle(dut, cycles)
 
         for core in dut.cores:
-            if int(str(dut.thread_count.value), 2) <= core.i.value * dut.THREADS_PER_BLOCK.value:
+            if int(str(dut.thread_count.value), 2) <= int(core.i.value) * int(dut.THREADS_PER_BLOCK.value):
                 continue
             ds = divergence_state(core)
             if ds["stack_ptr"] > max_stack_ptr_seen:

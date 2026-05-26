@@ -81,7 +81,8 @@ def _decode_hex_pair(hi_segs, lo_segs):
 
 
 def _ledr_bit(sig, bit):
-    s = str(sig)
+    # cocotb 2.0 returns LogicArray; str() yields uppercase X/Z for unknown bits.
+    s = str(sig).lower()
     # MSB-first; bit index counts from LSB. Length should be 10.
     if not s or len(s) < bit + 1:
         return None

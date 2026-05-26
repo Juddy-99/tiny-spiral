@@ -182,7 +182,7 @@ In real GPUs, individual threads can branch to different PCs, causing **branch d
 
 ![ISA](/docs/images/isa.png)
 
-tiny-gpu implements a simple 11 instruction ISA built to enable simple kernels for proof-of-concept like matrix addition & matrix multiplication (implementation further down on this page).
+tiny-gpu implements a simple 12 instruction ISA built to enable simple kernels for proof-of-concept like matrix addition & matrix multiplication (implementation further down on this page).
 
 For these purposes, it supports the following instructions:
 
@@ -192,6 +192,7 @@ For these purposes, it supports the following instructions:
 - `LDR` - Load data from global memory.
 - `STR` - Store data into global memory.
 - `CONST` - Load a constant value into a register.
+- `STRFB` (opcode `4'b1100`) - Write a pixel to the framebuffer. Encoded as `STRFB Rd, Rs, Rt` where `Rd` is the framebuffer X coordinate, `Rs` is the framebuffer Y coordinate, and `Rt` is the per-pixel data. While the framebuffer remains monochrome the LSU thresholds `Rt`: writes black when `Rt == 0`, otherwise white. The full 8-bit `Rt` payload is also exported at the GPU top so a future color framebuffer can consume it without an ISA change. `STRFB` reuses the existing scheduler `REQUEST/WAIT` path through a dedicated framebuffer controller, so it back-pressures the warp the same way `STR` does.
 - `RET` - Signal that the current thread has reached the end of execution.
 
 Each register is specified by 4 bits, meaning that there are 16 total registers. The first 13 register `R0` - `R12` are free registers that support read/write. The last 3 registers are special read-only registers used to supply the `%blockIdx`, `%blockDim`, and `%threadIdx` critical to SIMD.
@@ -204,7 +205,7 @@ Each core follows the following control flow going through different stages to e
 
 1. `FETCH` - Fetch the next instruction at current program counter from program memory.
 2. `DECODE` - Decode the instruction into control signals.
-3. `REQUEST` - Request data from global memory if necessary (if `LDR` or `STR` instruction).
+3. `REQUEST` - Request data from global memory if necessary (if `LDR`, `STR`, or `STRFB` instruction; `STRFB` issues a framebuffer pixel write through a dedicated controller while reusing the same handshake stalls).
 4. `WAIT` - Wait for data from global memory if applicable.
 5. `EXECUTE` - Execute any computations on data.
 6. `UPDATE` - Update register files and NZP register.

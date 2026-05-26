@@ -40,6 +40,16 @@ module core #(
     output reg [DATA_MEM_DATA_BITS-1:0] data_mem_write_data [THREADS_PER_BLOCK-1:0],
     input reg [THREADS_PER_BLOCK-1:0] data_mem_write_ready,
 
+    // Framebuffer Write Port (per-thread). One channel per LSU exposed at the
+    // core boundary; the GPU top serializes all per-thread requests through a
+    // single 1-channel framebuffer controller.
+    output reg [THREADS_PER_BLOCK-1:0] fb_write_valid,
+    output reg [7:0] fb_x [THREADS_PER_BLOCK-1:0],
+    output reg [7:0] fb_y [THREADS_PER_BLOCK-1:0],
+    output reg [7:0] fb_data [THREADS_PER_BLOCK-1:0],
+    output reg [THREADS_PER_BLOCK-1:0] fb_color,
+    input reg [THREADS_PER_BLOCK-1:0] fb_write_ready,
+
     output wire [PROGRAM_MEM_ADDR_BITS-1:0] dbg_current_pc,
     output wire [THREADS_PER_BLOCK-1:0] dbg_active_mask,
     output wire [THREADS_PER_BLOCK-1:0] dbg_done_mask,
@@ -62,6 +72,7 @@ module core #(
     wire [7:0] next_pc[THREADS_PER_BLOCK-1:0];
     reg [7:0] rs[THREADS_PER_BLOCK-1:0];
     reg [7:0] rt[THREADS_PER_BLOCK-1:0];
+    reg [7:0] rd_val[THREADS_PER_BLOCK-1:0];
     reg [1:0] lsu_state[THREADS_PER_BLOCK-1:0];
     reg [7:0] lsu_out[THREADS_PER_BLOCK-1:0];
     wire [7:0] alu_out[THREADS_PER_BLOCK-1:0];
@@ -90,6 +101,7 @@ module core #(
     reg decoded_reg_write_enable;           // Enable writing to a register
     reg decoded_mem_read_enable;            // Enable reading from memory
     reg decoded_mem_write_enable;           // Enable writing to memory
+    reg decoded_fb_write_enable;            // Enable writing a pixel to the framebuffer (STRFB)
     reg decoded_nzp_write_enable;           // Enable writing to NZP register
     reg [1:0] decoded_reg_input_mux;        // Select input to register
     reg [1:0] decoded_alu_arithmetic_mux;   // Select arithmetic operation
@@ -128,6 +140,7 @@ module core #(
         .decoded_reg_write_enable(decoded_reg_write_enable),
         .decoded_mem_read_enable(decoded_mem_read_enable),
         .decoded_mem_write_enable(decoded_mem_write_enable),
+        .decoded_fb_write_enable(decoded_fb_write_enable),
         .decoded_nzp_write_enable(decoded_nzp_write_enable),
         .decoded_reg_input_mux(decoded_reg_input_mux),
         .decoded_alu_arithmetic_mux(decoded_alu_arithmetic_mux),
@@ -232,6 +245,7 @@ module core #(
                 .core_state(core_state),
                 .decoded_mem_read_enable(decoded_mem_read_enable),
                 .decoded_mem_write_enable(decoded_mem_write_enable),
+                .decoded_fb_write_enable(decoded_fb_write_enable),
                 .mem_read_valid(data_mem_read_valid[i]),
                 .mem_read_address(data_mem_read_address[i]),
                 .mem_read_ready(data_mem_read_ready[i]),
@@ -240,8 +254,15 @@ module core #(
                 .mem_write_address(data_mem_write_address[i]),
                 .mem_write_data(data_mem_write_data[i]),
                 .mem_write_ready(data_mem_write_ready[i]),
+                .fb_write_valid(fb_write_valid[i]),
+                .fb_x(fb_x[i]),
+                .fb_y(fb_y[i]),
+                .fb_data(fb_data[i]),
+                .fb_color(fb_color[i]),
+                .fb_write_ready(fb_write_ready[i]),
                 .rs(rs[i]),
                 .rt(rt[i]),
+                .rd_val(rd_val[i]),
                 .lsu_state(lsu_state[i]),
                 .lsu_out(lsu_out[i])
             );
@@ -266,7 +287,8 @@ module core #(
                 .alu_out(alu_out[i]),
                 .lsu_out(lsu_out[i]),
                 .rs(rs[i]),
-                .rt(rt[i])
+                .rt(rt[i]),
+                .rd_val(rd_val[i])
             );
 
             // Program Counter

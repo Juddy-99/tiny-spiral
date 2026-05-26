@@ -73,7 +73,7 @@ async def test_matadd(dut):
         format_cycle(dut, cycles, thread_id=1)
 
         for core in dut.cores:
-            if int(str(dut.thread_count.value), 2) <= core.i.value * dut.THREADS_PER_BLOCK.value:
+            if int(str(dut.thread_count.value), 2) <= int(core.i.value) * int(dut.THREADS_PER_BLOCK.value):
                 continue
             ds = divergence_state(core)
             assert ds["stack_ptr"] == 0, (
