@@ -60,6 +60,15 @@ module sim_harness #(
     wire [2:0] dbg_core0_fetcher_state_nc;
     wire [THREADS_PER_BLOCK-1:0] dbg_core0_lsu_waiting_nc;
     wire [THREADS_PER_BLOCK-1:0] dbg_core0_lsu_requesting_nc;
+    wire dbg_core0_any_lsu_waiting_nc;
+    wire fb_write_valid_nc;
+    wire fb_is_line_nc;
+    wire [7:0] fb_x0_nc;
+    wire [7:0] fb_y0_nc;
+    wire [7:0] fb_x_nc;
+    wire [7:0] fb_y_nc;
+    wire [7:0] fb_data_nc;
+    wire fb_color_nc;
 
     gpu #(
         .DATA_MEM_ADDR_BITS(DATA_MEM_ADDR_BITS),
@@ -90,6 +99,16 @@ module sim_harness #(
         .data_mem_write_data(data_mem_write_data),
         .data_mem_write_ready(data_mem_write_ready),
 
+        .fb_write_valid(fb_write_valid_nc),
+        .fb_is_line(fb_is_line_nc),
+        .fb_x0(fb_x0_nc),
+        .fb_y0(fb_y0_nc),
+        .fb_x(fb_x_nc),
+        .fb_y(fb_y_nc),
+        .fb_data(fb_data_nc),
+        .fb_color(fb_color_nc),
+        .fb_write_ready(1'b1),
+
         .dbg_current_pc(dbg_current_pc_nc),
         .dbg_active_mask(dbg_active_mask_nc),
         .dbg_done_mask(dbg_done_mask_nc),
@@ -98,7 +117,8 @@ module sim_harness #(
         .dbg_core0_state(dbg_core0_state_nc),
         .dbg_core0_fetcher_state(dbg_core0_fetcher_state_nc),
         .dbg_core0_lsu_waiting(dbg_core0_lsu_waiting_nc),
-        .dbg_core0_lsu_requesting(dbg_core0_lsu_requesting_nc)
+        .dbg_core0_lsu_requesting(dbg_core0_lsu_requesting_nc),
+        .dbg_core0_any_lsu_waiting(dbg_core0_any_lsu_waiting_nc)
     );
 
     // Program memory: bridges + ROM

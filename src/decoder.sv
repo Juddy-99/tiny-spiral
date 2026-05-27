@@ -23,6 +23,8 @@ module decoder (
     output reg decoded_mem_read_enable,            // Enable reading from memory
     output reg decoded_mem_write_enable,           // Enable writing to memory
     output reg decoded_fb_write_enable,            // Enable writing a pixel to the framebuffer (STRFB)
+    output reg decoded_line_start_enable,          // Latch line start point (LNS)
+    output reg decoded_line_end_enable,            // Submit line end point (LNE)
     output reg decoded_nzp_write_enable,           // Enable writing to NZP register
     output reg [1:0] decoded_reg_input_mux,        // Select input to register
     output reg [1:0] decoded_alu_arithmetic_mux,   // Select arithmetic operation
@@ -42,6 +44,8 @@ module decoder (
         LDR = 4'b0111,
         STR = 4'b1000,
         CONST = 4'b1001,
+        LNS = 4'b1010,
+        LNE = 4'b1011,
         STRFB = 4'b1100,
         RET = 4'b1111;
 
@@ -56,6 +60,8 @@ module decoder (
             decoded_mem_read_enable <= 0;
             decoded_mem_write_enable <= 0;
             decoded_fb_write_enable <= 0;
+            decoded_line_start_enable <= 0;
+            decoded_line_end_enable <= 0;
             decoded_nzp_write_enable <= 0;
             decoded_reg_input_mux <= 0;
             decoded_alu_arithmetic_mux <= 0;
@@ -77,6 +83,8 @@ module decoder (
                 decoded_mem_read_enable <= 0;
                 decoded_mem_write_enable <= 0;
                 decoded_fb_write_enable <= 0;
+                decoded_line_start_enable <= 0;
+                decoded_line_end_enable <= 0;
                 decoded_nzp_write_enable <= 0;
                 decoded_reg_input_mux <= 0;
                 decoded_alu_arithmetic_mux <= 0;
@@ -127,6 +135,16 @@ module decoder (
                     CONST: begin 
                         decoded_reg_write_enable <= 1;
                         decoded_reg_input_mux <= 2'b10;
+                    end
+                    LNS: begin
+                        // LNS Rd, Rs, Rt: latch line start (Rd=x0, Rs=y0) and
+                        // remember the optional color/data source Rt in the LSU.
+                        decoded_line_start_enable <= 1;
+                    end
+                    LNE: begin
+                        // LNE Rd, Rs, Rt: submit a line from the previous LNS
+                        // point to (Rd=x1, Rs=y1), with Rt as pixel data/color.
+                        decoded_line_end_enable <= 1;
                     end
                     STRFB: begin
                         // STRFB Rd, Rs, Rt: write pixel (Rd=x, Rs=y, Rt=color/data)

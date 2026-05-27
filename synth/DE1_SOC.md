@@ -2,7 +2,7 @@
 
 LabsLand bring-up top: [`de1_soc.sv`](de1_soc.sv). Port names match [`lab2/DE1_SoC.sv`](../lab2/DE1_SoC.sv) so pin mapping is automatic.
 
-The GPU runs a fixed kernel from generated [`kernel_memories.sv`](kernel_memories.sv). Default build uses `test_diverge_ifelse` (four threads, if/else on `threadIdx`). Regenerate with:
+The GPU runs a fixed kernel from generated [`kernel_memories.sv`](kernel_memories.sv). Default build uses `test_diverge_ifelse` (four threads, if/else on `threadIdx`). The VGA path accepts direct `STRFB` pixel writes and `LNS`/`LNE` line-drawer requests through the same framebuffer bridge. Regenerate with:
 
 ```bash
 make synth_kernel KERNEL=test_diverge_ifelse
@@ -145,6 +145,7 @@ Cocotb tops that exercise this wiring:
 
 - `make test_synth_top` — PC on **HEX5..HEX4**, **LEDR[9]**, readback at **SW[7:4]=1**
 - `make test_synth_debug` — debug **LEDR** page 0 vs `data_mem_write_valid`
+- `make test_fb_line_engine` — direct pixel and Bresenham line request behavior before the framebuffer
 
 ## Quartus Signal Tap
 

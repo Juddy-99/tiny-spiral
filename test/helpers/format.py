@@ -41,6 +41,10 @@ def format_instruction(instruction: str) -> str:
         return f"STR {rs}, {rt}"
     elif opcode == "1001":
         return f"CONST {rd}, {imm}"
+    elif opcode == "1010":
+        return f"LNS {rd}, {rs}, {rt}"
+    elif opcode == "1011":
+        return f"LNE {rd}, {rs}, {rt}"
     elif opcode == "1100":
         return f"STRFB {rd}, {rs}, {rt}"
     elif opcode == "1111":

@@ -4,8 +4,8 @@
 // LOAD-STORE UNIT
 // > Handles asynchronous memory load and store operations and waits for response
 // > Each thread in each core has it's own LSU
-// > LDR, STR, STRFB instructions are executed here
-// > The framebuffer (STRFB) write path mirrors the STR path: it walks the
+// > LDR, STR, STRFB, LNS, and LNE instructions are executed here
+// > The framebuffer (STRFB/LNE) write path mirrors the STR path: it walks the
 //   IDLE -> REQUESTING -> WAITING -> DONE ladder and contributes to lsu_state,
 //   so any_lsu_waiting in the scheduler stalls the warp on FB back-pressure
 //   exactly the way it does for ordinary stores.
@@ -21,6 +21,8 @@ module lsu (
     input reg decoded_mem_read_enable,
     input reg decoded_mem_write_enable,
     input reg decoded_fb_write_enable,
+    input reg decoded_line_start_enable,
+    input reg decoded_line_end_enable,
 
     // Registers
     input reg [7:0] rs,
@@ -37,12 +39,16 @@ module lsu (
     output reg [7:0] mem_write_data,
     input reg mem_write_ready,
 
-    // Framebuffer Write Port (STRFB). x = Rd, y = Rs, data = Rt.
+    // Framebuffer Write Port. STRFB writes one pixel. LNS stores a per-thread
+    // line start, and LNE submits start/end coordinates as one line request.
     // fb_color is the monochrome thresholded pixel value (rt != 0). Carries
     // the per-thread "is this pixel on?" decision into the GPU top so a
     // later upgrade to color framebuffers can swap the math without touching
     // the LSU again.
     output reg fb_write_valid,
+    output reg fb_is_line,
+    output reg [7:0] fb_x0,
+    output reg [7:0] fb_y0,
     output reg [7:0] fb_x,
     output reg [7:0] fb_y,
     output reg [7:0] fb_data,
@@ -55,6 +61,9 @@ module lsu (
 );
     localparam IDLE = 2'b00, REQUESTING = 2'b01, WAITING = 2'b10, DONE = 2'b11;
 
+    reg [7:0] line_x0;
+    reg [7:0] line_y0;
+
     always @(posedge clk) begin
         if (reset) begin
             lsu_state <= IDLE;
@@ -65,10 +74,15 @@ module lsu (
             mem_write_address <= 0;
             mem_write_data <= 0;
             fb_write_valid <= 0;
+            fb_is_line <= 0;
+            fb_x0 <= 0;
+            fb_y0 <= 0;
             fb_x <= 0;
             fb_y <= 0;
             fb_data <= 0;
             fb_color <= 0;
+            line_x0 <= 0;
+            line_y0 <= 0;
         end else if (enable) begin
             // If memory read enable is triggered (LDR instruction)
             if (decoded_mem_read_enable) begin 
@@ -140,12 +154,70 @@ module lsu (
                     end
                     REQUESTING: begin
                         fb_write_valid <= 1;
+                        fb_is_line <= 0;
+                        fb_x0 <= rd_val;
+                        fb_y0 <= rs;
                         fb_x <= rd_val;
                         fb_y <= rs;
                         fb_data <= rt;
                         // Monochrome thresholding: any nonzero pixel data => white.
                         // Future color upgrade swaps this for a passthrough or palette
                         // lookup without touching the rest of the pipeline.
+                        fb_color <= (rt != 8'b0);
+                        lsu_state <= WAITING;
+                    end
+                    WAITING: begin
+                        if (fb_write_ready) begin
+                            fb_write_valid <= 0;
+                            lsu_state <= DONE;
+                        end
+                    end
+                    DONE: begin
+                        if (core_state == 3'b110) begin
+                            lsu_state <= IDLE;
+                        end
+                    end
+                endcase
+            end
+
+            // If line start enable is triggered (LNS instruction)
+            if (decoded_line_start_enable) begin
+                case (lsu_state)
+                    IDLE: begin
+                        if (core_state == 3'b011) begin
+                            lsu_state <= REQUESTING;
+                        end
+                    end
+                    REQUESTING: begin
+                        line_x0 <= rd_val;
+                        line_y0 <= rs;
+                        lsu_state <= DONE;
+                    end
+                    DONE: begin
+                        if (core_state == 3'b110) begin
+                            lsu_state <= IDLE;
+                        end
+                    end
+                    default: ;
+                endcase
+            end
+
+            // If line end enable is triggered (LNE instruction)
+            if (decoded_line_end_enable) begin
+                case (lsu_state)
+                    IDLE: begin
+                        if (core_state == 3'b011) begin
+                            lsu_state <= REQUESTING;
+                        end
+                    end
+                    REQUESTING: begin
+                        fb_write_valid <= 1;
+                        fb_is_line <= 1;
+                        fb_x0 <= line_x0;
+                        fb_y0 <= line_y0;
+                        fb_x <= rd_val;
+                        fb_y <= rs;
+                        fb_data <= rt;
                         fb_color <= (rt != 8'b0);
                         lsu_state <= WAITING;
                     end

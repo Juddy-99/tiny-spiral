@@ -168,18 +168,19 @@ module de1_soc #(
     wire [7:0] data_mem_write_data [DATA_MEM_NUM_CHANNELS-1:0];
     wire [DATA_MEM_NUM_CHANNELS-1:0] data_mem_write_ready;
 
-    // GPU-side framebuffer interface. Lives in the gpu_clk domain. The
-    // gpu_fb_write_ready ack is combinational from gpu_fb_write_valid so the
-    // LSU completes deterministically in one gpu_clk cycle. The slow
-    // gpu_clk also guarantees gpu_fb_write_valid is held high across many
-    // CLOCK_50 cycles, which makes the CDC pulse capture race-free.
+    // GPU-side framebuffer interface. Lives in the gpu_clk domain. STRFB sends
+    // direct pixels; LNE sends line requests with a start point captured by LNS.
+    // A toggle request/ack bridge below holds the GPU stalled until the
+    // CLOCK_50-domain framebuffer engine has consumed the request.
     wire        gpu_fb_write_valid;
+    wire        gpu_fb_is_line;
+    wire [7:0]  gpu_fb_x0;
+    wire [7:0]  gpu_fb_y0;
     wire [7:0]  gpu_fb_x;
     wire [7:0]  gpu_fb_y;
     wire [7:0]  gpu_fb_data;
     wire        gpu_fb_color;
     wire        gpu_fb_write_ready;
-    assign gpu_fb_write_ready = gpu_fb_write_valid;
 
     gpu #(
         .DATA_MEM_ADDR_BITS(8),
@@ -211,6 +212,9 @@ module de1_soc #(
         .data_mem_write_ready(data_mem_write_ready),
 
         .fb_write_valid(gpu_fb_write_valid),
+        .fb_is_line(gpu_fb_is_line),
+        .fb_x0(gpu_fb_x0),
+        .fb_y0(gpu_fb_y0),
         .fb_x(gpu_fb_x),
         .fb_y(gpu_fb_y),
         .fb_data(gpu_fb_data),
@@ -400,36 +404,130 @@ module de1_soc #(
 
     assign LEDR = SW[8] ? ledr_debug_sel : ledr_normal;
 
-    // ---- VGA framebuffer + gpu_clk -> CLOCK_50 CDC ----
-    // gpu_fb_write_valid is asserted for at least one full gpu_clk period
-    // (gpu_clk is always slower than CLOCK_50). Sync through a 3-FF chain on
-    // CLOCK_50 and edge-detect to produce a single-CLOCK_50-cycle pixel_write
-    // pulse. Coordinates and color are sampled from the GPU side (also
-    // gpu_clk domain) but their values are stable for the whole gpu_clk cycle
-    // so they meet the CLOCK_50 sample with timing slack.
-    reg fb_valid_sync_0, fb_valid_sync_1, fb_valid_sync_2;
-    always @(posedge CLOCK_50 or posedge reset_btn) begin
+    // ---- VGA framebuffer + gpu_clk -> CLOCK_50 request bridge ----
+    // The GPU holds each framebuffer request valid until gpu_fb_write_ready.
+    // We latch the payload, toggle a request bit into CLOCK_50, run the
+    // framebuffer engine, then toggle ack back after the pixel/line is written.
+    reg fb_req_toggle_gpu;
+    reg fb_req_pending_gpu;
+    reg fb_ack_toggle_clk50;
+    reg fb_ack_sync_0;
+    reg fb_ack_sync_1;
+    reg fb_req_is_line_gpu;
+    reg [7:0] fb_req_x0_gpu;
+    reg [7:0] fb_req_y0_gpu;
+    reg [7:0] fb_req_x_gpu;
+    reg [7:0] fb_req_y_gpu;
+    reg fb_req_color_gpu;
+
+    assign gpu_fb_write_ready = fb_req_pending_gpu && (fb_ack_sync_1 == fb_req_toggle_gpu);
+
+    always @(posedge gpu_clk or posedge reset_btn) begin
         if (reset_btn) begin
-            fb_valid_sync_0 <= 1'b0;
-            fb_valid_sync_1 <= 1'b0;
-            fb_valid_sync_2 <= 1'b0;
+            fb_req_toggle_gpu <= 1'b0;
+            fb_req_pending_gpu <= 1'b0;
+            fb_ack_sync_0 <= 1'b0;
+            fb_ack_sync_1 <= 1'b0;
+            fb_req_is_line_gpu <= 1'b0;
+            fb_req_x0_gpu <= 8'd0;
+            fb_req_y0_gpu <= 8'd0;
+            fb_req_x_gpu <= 8'd0;
+            fb_req_y_gpu <= 8'd0;
+            fb_req_color_gpu <= 1'b0;
         end else begin
-            fb_valid_sync_0 <= gpu_fb_write_valid;
-            fb_valid_sync_1 <= fb_valid_sync_0;
-            fb_valid_sync_2 <= fb_valid_sync_1;
+            fb_ack_sync_0 <= fb_ack_toggle_clk50;
+            fb_ack_sync_1 <= fb_ack_sync_0;
+
+            if (!fb_req_pending_gpu && gpu_fb_write_valid) begin
+                fb_req_is_line_gpu <= gpu_fb_is_line;
+                fb_req_x0_gpu <= gpu_fb_x0;
+                fb_req_y0_gpu <= gpu_fb_y0;
+                fb_req_x_gpu <= gpu_fb_x;
+                fb_req_y_gpu <= gpu_fb_y;
+                fb_req_color_gpu <= gpu_fb_color;
+                fb_req_toggle_gpu <= ~fb_req_toggle_gpu;
+                fb_req_pending_gpu <= 1'b1;
+            end else if (gpu_fb_write_ready) begin
+                fb_req_pending_gpu <= 1'b0;
+            end
         end
     end
 
-    // Rising edge of the synchronized valid -> one-CLOCK_50-cycle pixel_write.
-    wire fb_pixel_write = fb_valid_sync_1 & ~fb_valid_sync_2;
+    reg fb_req_sync_0;
+    reg fb_req_sync_1;
+    reg fb_req_seen_clk50;
+    reg fb_engine_start;
+    reg fb_engine_is_line;
+    reg [10:0] fb_engine_x0;
+    reg [10:0] fb_engine_y0;
+    reg [10:0] fb_engine_x1;
+    reg [10:0] fb_engine_y1;
+    reg fb_engine_color;
+    wire fb_engine_done;
+    wire fb_engine_busy;
+    wire [10:0] fb_engine_pixel_x;
+    wire [10:0] fb_engine_pixel_y;
+    wire fb_engine_pixel_color;
+    wire fb_engine_pixel_write;
+
+    always @(posedge CLOCK_50 or posedge reset_btn) begin
+        if (reset_btn) begin
+            fb_req_sync_0 <= 1'b0;
+            fb_req_sync_1 <= 1'b0;
+            fb_req_seen_clk50 <= 1'b0;
+            fb_ack_toggle_clk50 <= 1'b0;
+            fb_engine_start <= 1'b0;
+            fb_engine_is_line <= 1'b0;
+            fb_engine_x0 <= 11'd0;
+            fb_engine_y0 <= 11'd0;
+            fb_engine_x1 <= 11'd0;
+            fb_engine_y1 <= 11'd0;
+            fb_engine_color <= 1'b0;
+        end else begin
+            fb_req_sync_0 <= fb_req_toggle_gpu;
+            fb_req_sync_1 <= fb_req_sync_0;
+            fb_engine_start <= 1'b0;
+
+            if (!fb_engine_busy && (fb_req_sync_1 != fb_req_seen_clk50)) begin
+                fb_req_seen_clk50 <= fb_req_sync_1;
+                fb_engine_is_line <= fb_req_is_line_gpu;
+                fb_engine_x0 <= {3'b0, fb_req_x0_gpu};
+                fb_engine_y0 <= {3'b0, fb_req_y0_gpu};
+                fb_engine_x1 <= {3'b0, fb_req_x_gpu};
+                fb_engine_y1 <= {3'b0, fb_req_y_gpu};
+                fb_engine_color <= fb_req_color_gpu;
+                fb_engine_start <= 1'b1;
+            end else if (fb_engine_done) begin
+                fb_ack_toggle_clk50 <= fb_req_seen_clk50;
+            end
+        end
+    end
+
+    fb_line_engine fb_line_engine_instance (
+        .clk(CLOCK_50),
+        .reset(reset_btn),
+        .start(fb_engine_start),
+        .is_line(fb_engine_is_line),
+        .x0(fb_engine_x0),
+        .y0(fb_engine_y0),
+        .x1(fb_engine_x1),
+        .y1(fb_engine_y1),
+        .pixel_color_in(fb_engine_color),
+        .x(fb_engine_pixel_x),
+        .y(fb_engine_pixel_y),
+        .pixel_color(fb_engine_pixel_color),
+        .pixel_write(fb_engine_pixel_write),
+        .done(fb_engine_done),
+        .busy(fb_engine_busy)
+    );
 
     VGA_framebuffer fb_instance (
         .clk50      (CLOCK_50),
         .reset      (reset_btn),
-        .x          ({3'b0, gpu_fb_x}),
-        .y          ({3'b0, gpu_fb_y}),
-        .pixel_color(gpu_fb_color),
-        .pixel_write(fb_pixel_write),
+        .x          (fb_engine_pixel_x),
+        .y          (fb_engine_pixel_y),
+        .pixel_color(fb_engine_pixel_color),
+        .pixel_write(fb_engine_pixel_write),
         .VGA_R      (VGA_R),
         .VGA_G      (VGA_G),
         .VGA_B      (VGA_B),
