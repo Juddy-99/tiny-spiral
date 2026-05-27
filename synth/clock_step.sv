@@ -10,18 +10,24 @@
 //     filter would add more state, but for a demo this is enough since the GPU
 //     completes a kernel in <500 cycles and the user only presses once).
 //   - mode_auto = 1: free-run. clk_out toggles every AUTO_DIV cycles of clk_in.
-//     At AUTO_DIV=10_000_000 with CLOCK_50 = 50 MHz this gives ~5 Hz on the GPU
-//     -- slow enough to watch HEX displays change, fast enough that small
-//     kernels finish in seconds.
-// > AUTO_DIV is parameterized so cocotb tests can set it small (e.g. 4) without
-//   waiting 10 million sim ticks per gpu_clk edge.
+//     At AUTO_DIV=28_000 with CLOCK_50 = 50 MHz this gives ~893 Hz on gpu_clk
+//     (full period = 2 * AUTO_DIV / 50 MHz ~= 1.12 ms). The spiral kernel
+//     (test/test_spiral.py) runs one STRFB per ~223 gpu_clk cycles per thread
+//     -- a precomputed dense pixel sequence is loaded for thread 0 and
+//     rotated 90 deg per thread, four MULs per pixel -- so each of the 4
+//     threads paints roughly 4 pixels per second. With 120 emits per thread
+//     the entire pinwheel finishes in ~30 s, slow enough for the spiral to
+//     visibly grow yet fast enough for an interactive demo.
+// > AUTO_DIV is parameterized so cocotb tests of the synth top can override it
+//   with `-Pde1_soc.SLOW_CLK_DIV=2` (see Makefile test_synth_top), without
+//   waiting tens of thousands of sim ticks per gpu_clk edge.
 //
 // Note: gating CLOCK_50 to derive a slower clock would normally trip Quartus's
 // clock-domain warnings. We use a registered toggle (clk_out is a flip-flop on
 // CLOCK_50) so the resulting "slow clock" is actually a divided clock from
 // CLOCK_50, which Quartus will infer as a derived clock.
 module clock_step #(
-    parameter AUTO_DIV = 32'd10_000_000   // half-period in clk_in cycles
+    parameter AUTO_DIV = 32'd28_000   // half-period in clk_in cycles (~893 Hz gpu_clk)
 ) (
     input  wire clk_in,
     input  wire reset,

@@ -44,7 +44,9 @@
 //   Signal Tap: probe `de1_hardware_dbg_keep`, `gpu_instance.dbg_core0_*`, and
 //   `data_mem_*` / `data_ram_we` in de1_soc (names survive in Quartus STP).
 module de1_soc #(
-    parameter SLOW_CLK_DIV = 32'd10_000_000,    // ~5 Hz at 50 MHz
+    parameter SLOW_CLK_DIV = 32'd28_000,        // ~893 Hz gpu_clk -> ~4 pixels/sec/thread
+                                                 // for the test_spiral kernel (~223 cycles/emit/thread,
+                                                 // 120 emits per thread w/ rotation -> ~30 s to paint)
     parameter THREADS = 8'd4
 ) (
     input  wire        CLOCK_50,
