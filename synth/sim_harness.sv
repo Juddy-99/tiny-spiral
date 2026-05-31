@@ -62,9 +62,11 @@ module sim_harness #(
     wire [THREADS_PER_BLOCK-1:0] dbg_core0_lsu_requesting_nc;
     wire dbg_core0_any_lsu_waiting_nc;
     wire fb_write_valid_nc;
-    wire fb_is_line_nc;
+    wire [1:0] fb_mode_nc;
     wire [7:0] fb_x0_nc;
     wire [7:0] fb_y0_nc;
+    wire [7:0] fb_x1_nc;
+    wire [7:0] fb_y1_nc;
     wire [7:0] fb_x_nc;
     wire [7:0] fb_y_nc;
     wire [7:0] fb_data_nc;
@@ -100,9 +102,11 @@ module sim_harness #(
         .data_mem_write_ready(data_mem_write_ready),
 
         .fb_write_valid(fb_write_valid_nc),
-        .fb_is_line(fb_is_line_nc),
+        .fb_mode(fb_mode_nc),
         .fb_x0(fb_x0_nc),
         .fb_y0(fb_y0_nc),
+        .fb_x1(fb_x1_nc),
+        .fb_y1(fb_y1_nc),
         .fb_x(fb_x_nc),
         .fb_y(fb_y_nc),
         .fb_data(fb_data_nc),

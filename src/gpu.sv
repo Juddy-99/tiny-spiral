@@ -46,13 +46,16 @@ module gpu #(
     input wire [DATA_MEM_NUM_CHANNELS-1:0] data_mem_write_ready,
 
     // Framebuffer Write Port (single 1-channel write-only interface). All
-    // per-thread STRFB/LNE requests are serialized through a dedicated
+    // per-thread STRFB/LNE/TRE requests are serialized through a dedicated
     // controller and presented here. Coordinates are 8 bits today (reachable
-    // window is 256x256 of the 640x480 VGA screen).
+    // window is 256x256 of the 640x480 VGA screen). fb_mode selects between
+    // PIXEL (2'b00), LINE (2'b01), and TRI (2'b10).
     output wire fb_write_valid,
-    output wire fb_is_line,
+    output wire [1:0] fb_mode,
     output wire [7:0] fb_x0,
     output wire [7:0] fb_y0,
+    output wire [7:0] fb_x1,
+    output wire [7:0] fb_y1,
     output wire [7:0] fb_x,
     output wire [7:0] fb_y,
     output wire [7:0] fb_data,
@@ -110,12 +113,12 @@ module gpu #(
     reg [PROGRAM_MEM_DATA_BITS-1:0] fetcher_read_data [NUM_FETCHERS-1:0];
 
     // LSU <> Framebuffer Controller Channels
-    // Address = {fb_y, fb_x, fb_y0, fb_x0} (32b), Data =
-    // {fb_is_line, fb_color, fb_data} (10b). One
-    // controller channel serializes all NUM_LSUS write requests. Reads are
-    // tied off so the controller only ever takes the write path.
-    localparam FB_ADDR_BITS = 32;
-    localparam FB_DATA_BITS = 10;
+    // Address = {fb_y, fb_x, fb_y1, fb_x1, fb_y0, fb_x0} (48b), Data =
+    // {fb_mode[1:0], fb_color, fb_data} (11b). One controller channel
+    // serializes all NUM_LSUS write requests. Reads are tied off so the
+    // controller only ever takes the write path.
+    localparam FB_ADDR_BITS = 48;
+    localparam FB_DATA_BITS = 11;
     reg [NUM_LSUS-1:0] lsu_fb_write_valid;
     reg [FB_ADDR_BITS-1:0] lsu_fb_write_address [NUM_LSUS-1:0];
     reg [FB_DATA_BITS-1:0] lsu_fb_write_data [NUM_LSUS-1:0];
@@ -259,11 +262,13 @@ module gpu #(
     assign fb_write_valid = fb_mem_write_valid_w;
     assign fb_x0          = fb_mem_write_address_w[7:0];
     assign fb_y0          = fb_mem_write_address_w[15:8];
-    assign fb_x           = fb_mem_write_address_w[23:16];
-    assign fb_y           = fb_mem_write_address_w[31:24];
+    assign fb_x1          = fb_mem_write_address_w[23:16];
+    assign fb_y1          = fb_mem_write_address_w[31:24];
+    assign fb_x           = fb_mem_write_address_w[39:32];
+    assign fb_y           = fb_mem_write_address_w[47:40];
     assign fb_data        = fb_mem_write_data_w[7:0];
     assign fb_color       = fb_mem_write_data_w[8];
-    assign fb_is_line     = fb_mem_write_data_w[9];
+    assign fb_mode        = fb_mem_write_data_w[10:9];
 
     // Dispatcher
     dispatch #(
@@ -304,9 +309,11 @@ module gpu #(
             // valid/address/data on the way out, combinational ready on the way
             // back so the LSU sees the controller's write_ready in the same cycle.
             wire [THREADS_PER_BLOCK-1:0] core_fb_write_valid;
-            wire [THREADS_PER_BLOCK-1:0] core_fb_is_line;
+            wire [1:0] core_fb_mode [THREADS_PER_BLOCK-1:0];
             wire [7:0] core_fb_x0 [THREADS_PER_BLOCK-1:0];
             wire [7:0] core_fb_y0 [THREADS_PER_BLOCK-1:0];
+            wire [7:0] core_fb_x1 [THREADS_PER_BLOCK-1:0];
+            wire [7:0] core_fb_y1 [THREADS_PER_BLOCK-1:0];
             wire [7:0] core_fb_x [THREADS_PER_BLOCK-1:0];
             wire [7:0] core_fb_y [THREADS_PER_BLOCK-1:0];
             wire [7:0] core_fb_data [THREADS_PER_BLOCK-1:0];
@@ -330,10 +337,12 @@ module gpu #(
 
                     lsu_fb_write_valid[lsu_index]   <= core_fb_write_valid[j];
                     lsu_fb_write_address[lsu_index] <= {
-                        core_fb_y[j], core_fb_x[j], core_fb_y0[j], core_fb_x0[j]
+                        core_fb_y[j], core_fb_x[j],
+                        core_fb_y1[j], core_fb_x1[j],
+                        core_fb_y0[j], core_fb_x0[j]
                     };
                     lsu_fb_write_data[lsu_index]    <= {
-                        core_fb_is_line[j], core_fb_color[j], core_fb_data[j]
+                        core_fb_mode[j], core_fb_color[j], core_fb_data[j]
                     };
 
                     core_lsu_read_ready[j] <= lsu_read_ready[lsu_index];
@@ -372,9 +381,11 @@ module gpu #(
                 .data_mem_write_ready(core_lsu_write_ready),
 
                 .fb_write_valid(core_fb_write_valid),
-                .fb_is_line(core_fb_is_line),
+                .fb_mode(core_fb_mode),
                 .fb_x0(core_fb_x0),
                 .fb_y0(core_fb_y0),
+                .fb_x1(core_fb_x1),
+                .fb_y1(core_fb_y1),
                 .fb_x(core_fb_x),
                 .fb_y(core_fb_y),
                 .fb_data(core_fb_data),

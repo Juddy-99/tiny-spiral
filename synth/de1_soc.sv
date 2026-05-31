@@ -47,7 +47,11 @@ module de1_soc #(
     parameter SLOW_CLK_DIV = 32'd28_000,        // ~893 Hz gpu_clk -> ~4 pixels/sec/thread
                                                  // for the test_spiral kernel (~223 cycles/emit/thread,
                                                  // 120 emits per thread w/ rotation -> ~30 s to paint)
-    parameter THREADS = 8'd4
+    parameter THREADS = 8'd4,
+    // > Hardware default walks all 307200 framebuffer addresses on reset
+    //   (~6 ms @ 50 MHz). Simulation overrides this via -Pde1_soc.FB_CLEAR_END_ADDR=63
+    //   so the existing test_synth_* cycle budgets stay tight.
+    parameter [18:0] FB_CLEAR_END_ADDR = 19'd 307199
 ) (
     input  wire        CLOCK_50,
     input  wire [9:0]  SW,
@@ -173,9 +177,11 @@ module de1_soc #(
     // A toggle request/ack bridge below holds the GPU stalled until the
     // CLOCK_50-domain framebuffer engine has consumed the request.
     wire        gpu_fb_write_valid;
-    wire        gpu_fb_is_line;
+    wire [1:0]  gpu_fb_mode;
     wire [7:0]  gpu_fb_x0;
     wire [7:0]  gpu_fb_y0;
+    wire [7:0]  gpu_fb_x1;
+    wire [7:0]  gpu_fb_y1;
     wire [7:0]  gpu_fb_x;
     wire [7:0]  gpu_fb_y;
     wire [7:0]  gpu_fb_data;
@@ -212,9 +218,11 @@ module de1_soc #(
         .data_mem_write_ready(data_mem_write_ready),
 
         .fb_write_valid(gpu_fb_write_valid),
-        .fb_is_line(gpu_fb_is_line),
+        .fb_mode(gpu_fb_mode),
         .fb_x0(gpu_fb_x0),
         .fb_y0(gpu_fb_y0),
+        .fb_x1(gpu_fb_x1),
+        .fb_y1(gpu_fb_y1),
         .fb_x(gpu_fb_x),
         .fb_y(gpu_fb_y),
         .fb_data(gpu_fb_data),
@@ -413,9 +421,11 @@ module de1_soc #(
     reg fb_ack_toggle_clk50;
     reg fb_ack_sync_0;
     reg fb_ack_sync_1;
-    reg fb_req_is_line_gpu;
+    reg [1:0] fb_req_mode_gpu;
     reg [7:0] fb_req_x0_gpu;
     reg [7:0] fb_req_y0_gpu;
+    reg [7:0] fb_req_x1_gpu;
+    reg [7:0] fb_req_y1_gpu;
     reg [7:0] fb_req_x_gpu;
     reg [7:0] fb_req_y_gpu;
     reg fb_req_color_gpu;
@@ -428,9 +438,11 @@ module de1_soc #(
             fb_req_pending_gpu <= 1'b0;
             fb_ack_sync_0 <= 1'b0;
             fb_ack_sync_1 <= 1'b0;
-            fb_req_is_line_gpu <= 1'b0;
+            fb_req_mode_gpu <= 2'd0;
             fb_req_x0_gpu <= 8'd0;
             fb_req_y0_gpu <= 8'd0;
+            fb_req_x1_gpu <= 8'd0;
+            fb_req_y1_gpu <= 8'd0;
             fb_req_x_gpu <= 8'd0;
             fb_req_y_gpu <= 8'd0;
             fb_req_color_gpu <= 1'b0;
@@ -439,9 +451,11 @@ module de1_soc #(
             fb_ack_sync_1 <= fb_ack_sync_0;
 
             if (!fb_req_pending_gpu && gpu_fb_write_valid) begin
-                fb_req_is_line_gpu <= gpu_fb_is_line;
+                fb_req_mode_gpu <= gpu_fb_mode;
                 fb_req_x0_gpu <= gpu_fb_x0;
                 fb_req_y0_gpu <= gpu_fb_y0;
+                fb_req_x1_gpu <= gpu_fb_x1;
+                fb_req_y1_gpu <= gpu_fb_y1;
                 fb_req_x_gpu <= gpu_fb_x;
                 fb_req_y_gpu <= gpu_fb_y;
                 fb_req_color_gpu <= gpu_fb_color;
@@ -453,22 +467,56 @@ module de1_soc #(
         end
     end
 
+    // ---- CLOCK_50-side engine bridge with 3-way (PIXEL/LINE/TRI) mux ----
+    // Only one engine runs per request. fb_engine_busy = OR of all engines'
+    // busy signals; fb_engine_done = OR of all engines' done pulses.
+    localparam [1:0] FB_MODE_PIXEL = 2'b00, FB_MODE_LINE = 2'b01, FB_MODE_TRI = 2'b10;
+
     reg fb_req_sync_0;
     reg fb_req_sync_1;
     reg fb_req_seen_clk50;
-    reg fb_engine_start;
-    reg fb_engine_is_line;
+    reg [1:0] fb_engine_mode;
     reg [10:0] fb_engine_x0;
     reg [10:0] fb_engine_y0;
     reg [10:0] fb_engine_x1;
     reg [10:0] fb_engine_y1;
+    reg [10:0] fb_engine_x2;
+    reg [10:0] fb_engine_y2;
     reg fb_engine_color;
-    wire fb_engine_done;
-    wire fb_engine_busy;
-    wire [10:0] fb_engine_pixel_x;
-    wire [10:0] fb_engine_pixel_y;
-    wire fb_engine_pixel_color;
-    wire fb_engine_pixel_write;
+
+    reg line_start_pulse;
+    reg tri_start_pulse;
+
+    wire line_engine_done;
+    wire line_engine_busy;
+    wire [10:0] line_engine_x;
+    wire [10:0] line_engine_y;
+    wire line_engine_pixel_color;
+    wire line_engine_pixel_write;
+
+    wire tri_engine_done;
+    wire tri_engine_busy;
+    wire [10:0] tri_engine_x;
+    wire [10:0] tri_engine_y;
+    wire tri_engine_pixel_color;
+    wire tri_engine_pixel_write;
+
+    wire fb_engine_done = line_engine_done | tri_engine_done;
+    wire fb_engine_busy = line_engine_busy | tri_engine_busy;
+
+    // Driven by VGA_framebuffer's clear-on-reset FSM. While high, the
+    // framebuffer is being walked to zero; the bridge below refuses to accept
+    // new GPU FB requests so the engines don't fight the clear pass and lose
+    // writes. The GPU's LSU naturally stalls in its WAITING state.
+    wire fb_clearing;
+
+    // Pixel output mux. The line_engine drives PIXEL and LINE modes; the
+    // tri_engine drives TRI mode. Only one is busy at a time, so the OR-mux
+    // on pixel_write picks the active engine cleanly.
+    wire [10:0] fb_engine_pixel_x     = tri_engine_busy ? tri_engine_x : line_engine_x;
+    wire [10:0] fb_engine_pixel_y     = tri_engine_busy ? tri_engine_y : line_engine_y;
+    wire        fb_engine_pixel_color = tri_engine_busy ? tri_engine_pixel_color : line_engine_pixel_color;
+    wire        fb_engine_pixel_write = line_engine_pixel_write | tri_engine_pixel_write;
 
     always @(posedge CLOCK_50 or posedge reset_btn) begin
         if (reset_btn) begin
@@ -476,58 +524,94 @@ module de1_soc #(
             fb_req_sync_1 <= 1'b0;
             fb_req_seen_clk50 <= 1'b0;
             fb_ack_toggle_clk50 <= 1'b0;
-            fb_engine_start <= 1'b0;
-            fb_engine_is_line <= 1'b0;
+            line_start_pulse <= 1'b0;
+            tri_start_pulse <= 1'b0;
+            fb_engine_mode <= 2'd0;
             fb_engine_x0 <= 11'd0;
             fb_engine_y0 <= 11'd0;
             fb_engine_x1 <= 11'd0;
             fb_engine_y1 <= 11'd0;
+            fb_engine_x2 <= 11'd0;
+            fb_engine_y2 <= 11'd0;
             fb_engine_color <= 1'b0;
         end else begin
             fb_req_sync_0 <= fb_req_toggle_gpu;
             fb_req_sync_1 <= fb_req_sync_0;
-            fb_engine_start <= 1'b0;
+            line_start_pulse <= 1'b0;
+            tri_start_pulse <= 1'b0;
 
-            if (!fb_engine_busy && (fb_req_sync_1 != fb_req_seen_clk50)) begin
+            if (!fb_engine_busy && !fb_clearing && (fb_req_sync_1 != fb_req_seen_clk50)) begin
                 fb_req_seen_clk50 <= fb_req_sync_1;
-                fb_engine_is_line <= fb_req_is_line_gpu;
+                fb_engine_mode <= fb_req_mode_gpu;
                 fb_engine_x0 <= {3'b0, fb_req_x0_gpu};
                 fb_engine_y0 <= {3'b0, fb_req_y0_gpu};
-                fb_engine_x1 <= {3'b0, fb_req_x_gpu};
-                fb_engine_y1 <= {3'b0, fb_req_y_gpu};
+                fb_engine_x1 <= {3'b0, fb_req_x1_gpu};
+                fb_engine_y1 <= {3'b0, fb_req_y1_gpu};
+                fb_engine_x2 <= {3'b0, fb_req_x_gpu};
+                fb_engine_y2 <= {3'b0, fb_req_y_gpu};
                 fb_engine_color <= fb_req_color_gpu;
-                fb_engine_start <= 1'b1;
+                if (fb_req_mode_gpu == FB_MODE_TRI) begin
+                    tri_start_pulse <= 1'b1;
+                end else begin
+                    // PIXEL and LINE both go through fb_line_engine.
+                    line_start_pulse <= 1'b1;
+                end
             end else if (fb_engine_done) begin
                 fb_ack_toggle_clk50 <= fb_req_seen_clk50;
             end
         end
     end
 
+    // fb_line_engine sees (x0, y0) as the line start (for LINE) and (x1, y1)
+    // as the line end / PIXEL coord. For TRI mode, x2/y2 is v2; the triangle
+    // engine consumes x0..x2 / y0..y2 directly.
     fb_line_engine fb_line_engine_instance (
         .clk(CLOCK_50),
         .reset(reset_btn),
-        .start(fb_engine_start),
-        .is_line(fb_engine_is_line),
+        .start(line_start_pulse),
+        .is_line(fb_engine_mode == FB_MODE_LINE),
+        .x0(fb_engine_x0),
+        .y0(fb_engine_y0),
+        .x1(fb_engine_x2),
+        .y1(fb_engine_y2),
+        .pixel_color_in(fb_engine_color),
+        .x(line_engine_x),
+        .y(line_engine_y),
+        .pixel_color(line_engine_pixel_color),
+        .pixel_write(line_engine_pixel_write),
+        .done(line_engine_done),
+        .busy(line_engine_busy)
+    );
+
+    fb_triangle_engine fb_triangle_engine_instance (
+        .clk(CLOCK_50),
+        .reset(reset_btn),
+        .start(tri_start_pulse),
         .x0(fb_engine_x0),
         .y0(fb_engine_y0),
         .x1(fb_engine_x1),
         .y1(fb_engine_y1),
+        .x2(fb_engine_x2),
+        .y2(fb_engine_y2),
         .pixel_color_in(fb_engine_color),
-        .x(fb_engine_pixel_x),
-        .y(fb_engine_pixel_y),
-        .pixel_color(fb_engine_pixel_color),
-        .pixel_write(fb_engine_pixel_write),
-        .done(fb_engine_done),
-        .busy(fb_engine_busy)
+        .x(tri_engine_x),
+        .y(tri_engine_y),
+        .pixel_color(tri_engine_pixel_color),
+        .pixel_write(tri_engine_pixel_write),
+        .done(tri_engine_done),
+        .busy(tri_engine_busy)
     );
 
-    VGA_framebuffer fb_instance (
+    VGA_framebuffer #(
+        .CLEAR_END_ADDR(FB_CLEAR_END_ADDR)
+    ) fb_instance (
         .clk50      (CLOCK_50),
         .reset      (reset_btn),
         .x          (fb_engine_pixel_x),
         .y          (fb_engine_pixel_y),
         .pixel_color(fb_engine_pixel_color),
         .pixel_write(fb_engine_pixel_write),
+        .clearing   (fb_clearing),
         .VGA_R      (VGA_R),
         .VGA_G      (VGA_G),
         .VGA_B      (VGA_B),

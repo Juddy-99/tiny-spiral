@@ -42,11 +42,13 @@ module core #(
 
     // Framebuffer Write Port (per-thread). One channel per LSU exposed at the
     // core boundary; the GPU top serializes all per-thread requests through a
-    // single 1-channel framebuffer controller.
+    // single 1-channel framebuffer controller. fb_mode selects PIXEL/LINE/TRI.
     output reg [THREADS_PER_BLOCK-1:0] fb_write_valid,
-    output reg [THREADS_PER_BLOCK-1:0] fb_is_line,
+    output reg [1:0] fb_mode [THREADS_PER_BLOCK-1:0],
     output reg [7:0] fb_x0 [THREADS_PER_BLOCK-1:0],
     output reg [7:0] fb_y0 [THREADS_PER_BLOCK-1:0],
+    output reg [7:0] fb_x1 [THREADS_PER_BLOCK-1:0],
+    output reg [7:0] fb_y1 [THREADS_PER_BLOCK-1:0],
     output reg [7:0] fb_x [THREADS_PER_BLOCK-1:0],
     output reg [7:0] fb_y [THREADS_PER_BLOCK-1:0],
     output reg [7:0] fb_data [THREADS_PER_BLOCK-1:0],
@@ -107,6 +109,8 @@ module core #(
     reg decoded_fb_write_enable;            // Enable writing a pixel to the framebuffer (STRFB)
     reg decoded_line_start_enable;          // LNS: latch line start point
     reg decoded_line_end_enable;            // LNE: submit line end point
+    reg decoded_tri_vertex_enable;          // TRV: latch a triangle vertex
+    reg decoded_tri_submit_enable;          // TRE: submit triangle
     reg decoded_nzp_write_enable;           // Enable writing to NZP register
     reg [1:0] decoded_reg_input_mux;        // Select input to register
     reg [1:0] decoded_alu_arithmetic_mux;   // Select arithmetic operation
@@ -148,6 +152,8 @@ module core #(
         .decoded_fb_write_enable(decoded_fb_write_enable),
         .decoded_line_start_enable(decoded_line_start_enable),
         .decoded_line_end_enable(decoded_line_end_enable),
+        .decoded_tri_vertex_enable(decoded_tri_vertex_enable),
+        .decoded_tri_submit_enable(decoded_tri_submit_enable),
         .decoded_nzp_write_enable(decoded_nzp_write_enable),
         .decoded_reg_input_mux(decoded_reg_input_mux),
         .decoded_alu_arithmetic_mux(decoded_alu_arithmetic_mux),
@@ -255,6 +261,8 @@ module core #(
                 .decoded_fb_write_enable(decoded_fb_write_enable),
                 .decoded_line_start_enable(decoded_line_start_enable),
                 .decoded_line_end_enable(decoded_line_end_enable),
+                .decoded_tri_vertex_enable(decoded_tri_vertex_enable),
+                .decoded_tri_submit_enable(decoded_tri_submit_enable),
                 .mem_read_valid(data_mem_read_valid[i]),
                 .mem_read_address(data_mem_read_address[i]),
                 .mem_read_ready(data_mem_read_ready[i]),
@@ -264,9 +272,11 @@ module core #(
                 .mem_write_data(data_mem_write_data[i]),
                 .mem_write_ready(data_mem_write_ready[i]),
                 .fb_write_valid(fb_write_valid[i]),
-                .fb_is_line(fb_is_line[i]),
+                .fb_mode(fb_mode[i]),
                 .fb_x0(fb_x0[i]),
                 .fb_y0(fb_y0[i]),
+                .fb_x1(fb_x1[i]),
+                .fb_y1(fb_y1[i]),
                 .fb_x(fb_x[i]),
                 .fb_y(fb_y[i]),
                 .fb_data(fb_data[i]),

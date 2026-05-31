@@ -29,9 +29,10 @@
  *   VGA_BLANK_n    - Blanking interval of the VGA connection
  *   VGA_SYNC_n     - Enable signal for the sync of the VGA connection
  */
-module VGA_framebuffer(clk50, reset, x, y, pixel_color, pixel_write, 
+module VGA_framebuffer(clk50, reset, x, y, pixel_color, pixel_write,
+    clearing,
     VGA_R, VGA_G, VGA_B, VGA_CLK, VGA_HS, VGA_VS, VGA_BLANK_n, VGA_SYNC_n);
-    
+
     parameter   HACTIVE      = 11'd 1280, // 2 x 640. h_count is incrememnted on the 50 MHz clock but read on a 25 MHz clock
                 HFRONT_PORCH = 11'd 32,
                 HSYNC        = 11'd 192,
@@ -43,10 +44,17 @@ module VGA_framebuffer(clk50, reset, x, y, pixel_color, pixel_write,
                 VSYNC        = 10'd 2,
                 VBACK_PORCH  = 10'd 33,
                 VTOTAL       = VACTIVE + VFRONT_PORCH + VSYNC + VBACK_PORCH; // 525
-    
+
+    // > Last address written by the clear-on-reset FSM. Default 307199 walks
+    //   the entire 640x480 framebuffer (~6.1 ms @ 50 MHz - invisible on
+    //   hardware). Simulation overrides this to a tiny value so existing
+    //   test_synth_* cycle budgets still pass.
+    parameter CLEAR_END_ADDR = 19'd 307199;
+
     input logic clk50, reset;
     input logic [10:0] x, y;  // Pixel coordinates
     input logic pixel_color, pixel_write;
+    output logic clearing;  // High while clear-on-reset FSM is walking the framebuffer.
     output logic [7:0] VGA_R, VGA_G, VGA_B;
     output logic VGA_CLK, VGA_HS, VGA_VS, VGA_BLANK_n, VGA_SYNC_n;
 
@@ -92,11 +100,37 @@ module VGA_framebuffer(clk50, reset, x, y, pixel_color, pixel_write,
 
     // potentally also have students write reading/writing framebuffer
 
-    always_ff @(posedge clk50) 
+    // > Clear-on-reset FSM. M10K block RAM keeps its contents across a warm
+    //   reset (KEY[3]), so without this pass the previous frame's pixels
+    //   would still be visible after pressing reset. After reset deasserts we
+    //   walk addresses 0..CLEAR_END_ADDR writing 0, while gating the external
+    //   `pixel_write` so engine writes that race the clear don't get wiped.
+    //   `de1_soc.sv` also gates new FB request acceptance on `clearing` so the
+    //   GPU stalls until the framebuffer is fully black.
+    logic [18:0] clear_addr;
+
+    always_ff @(posedge clk50 or posedge reset) begin
+        if (reset) begin
+            clearing   <= 1'b1;
+            clear_addr <= 19'd0;
+        end else if (clearing) begin
+            if (clear_addr == CLEAR_END_ADDR[18:0]) begin
+                clearing <= 1'b0;
+            end else begin
+                clear_addr <= clear_addr + 19'd1;
+            end
+        end
+    end
+
+    wire        fb_we   = clearing | pixel_write;
+    wire [18:0] fb_addr = clearing ? clear_addr   : write_address;
+    wire        fb_data = clearing ? 1'b0         : pixel_color;
+
+    always_ff @(posedge clk50)
     begin
-        if (pixel_write) 
-            framebuffer[write_address] <= pixel_color;
-        if (hcount[0]) 
+        if (fb_we)
+            framebuffer[fb_addr] <= fb_data;
+        if (hcount[0])
         begin
             pixel_read <= framebuffer[read_address];
             VGA_BLANK_n <= ~blank;  // Keep blank in sync with pixel data

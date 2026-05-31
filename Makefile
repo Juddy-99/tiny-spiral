@@ -1,4 +1,4 @@
-.PHONY: test compile compile_synth compile_synth_top synth_kernel test_line_drawer test_fb_line_engine test_mem_bridge test_synth_top test_synth_line_draw test_synth_spiral test_synth_debug test_synth_store test_harness_store
+.PHONY: test compile compile_synth compile_synth_top synth_kernel test_line_drawer test_fb_line_engine test_recip_lut test_fb_triangle_engine test_mem_bridge test_synth_top test_synth_line_draw test_synth_spiral test_synth_triangle test_synth_debug test_synth_store test_harness_store
 
 # Prefer repo .venv for cocotb (cocotb-config + VPI) without manually activating it.
 # Use an absolute path for $(shell ...) — exported PATH is not always visible to
@@ -45,6 +45,16 @@ test_fb_line_engine:
 	iverilog -o build/sim.vvp -s fb_line_engine -g2012 synth/line_drawer.sv synth/fb_line_engine.sv
 	MODULE=test.test_fb_line_engine COCOTB_TEST_MODULES=test.test_fb_line_engine vvp -M $(COCOTB_LIB_DIR) -m libcocotbvpi_icarus build/sim.vvp
 
+# Stage 0 gate: standalone Q16 reciprocal LUT sweep.
+test_recip_lut:
+	iverilog -o build/sim.vvp -s recip_lut -g2012 synth/recip_lut.sv
+	MODULE=test.test_recip_lut COCOTB_TEST_MODULES=test.test_recip_lut vvp -M $(COCOTB_LIB_DIR) -m libcocotbvpi_icarus build/sim.vvp
+
+# Stage 2 gate: standalone triangle rasterizer engine.
+test_fb_triangle_engine:
+	iverilog -o build/sim.vvp -s fb_triangle_engine -g2012 synth/recip_lut.sv synth/fb_triangle_engine.sv
+	MODULE=test.test_fb_triangle_engine COCOTB_TEST_MODULES=test.test_fb_triangle_engine vvp -M $(COCOTB_LIB_DIR) -m libcocotbvpi_icarus build/sim.vvp
+
 compile:
 	make compile_alu
 	sv2v -I src/* -w build/gpu.v
@@ -77,7 +87,9 @@ compile_synth_top:
 		src/divergence.sv src/dispatch.sv src/fetcher.sv src/lsu.sv src/pc.sv \
 		src/registers.sv src/scheduler.sv src/core.sv src/gpu.sv \
 		synth/mem_bridge.sv synth/seg7.sv synth/clock_step.sv \
-		synth/line_drawer.sv synth/fb_line_engine.sv synth/VGA_framebuffer.sv \
+		synth/line_drawer.sv synth/fb_line_engine.sv \
+		synth/recip_lut.sv synth/fb_triangle_engine.sv \
+		synth/VGA_framebuffer.sv \
 		synth/kernel_memories.sv synth/de1_soc.sv
 	echo '`timescale 1ns/1ns' > build/temp.v
 	cat build/synth_top.v >> build/temp.v
@@ -95,7 +107,7 @@ test_mem_bridge:
 test_synth_top:
 	$(MAKE) synth_kernel KERNEL=test_diverge_ifelse
 	$(MAKE) compile_synth_top
-	iverilog -Pde1_soc.SLOW_CLK_DIV=2 -o build/sim.vvp -s de1_soc -g2012 build/synth_top.v
+	iverilog -Pde1_soc.SLOW_CLK_DIV=2 -Pde1_soc.FB_CLEAR_END_ADDR=63 -o build/sim.vvp -s de1_soc -g2012 build/synth_top.v
 	MODULE=test.test_synth_top COCOTB_TEST_MODULES=test.test_synth_top vvp -M $(COCOTB_LIB_DIR) -m libcocotbvpi_icarus build/sim.vvp
 
 # Synth-top line-drawing kernel. After this rule, synth/kernel_memories.sv is
@@ -103,7 +115,7 @@ test_synth_top:
 test_synth_line_draw:
 	$(MAKE) synth_kernel KERNEL=test_synth_line_draw
 	$(MAKE) compile_synth_top
-	iverilog -Pde1_soc.SLOW_CLK_DIV=2 -o build/sim.vvp -s de1_soc -g2012 build/synth_top.v
+	iverilog -Pde1_soc.SLOW_CLK_DIV=2 -Pde1_soc.FB_CLEAR_END_ADDR=63 -o build/sim.vvp -s de1_soc -g2012 build/synth_top.v
 	MODULE=test.test_synth_line_draw COCOTB_TEST_MODULES=test.test_synth_line_draw vvp -M $(COCOTB_LIB_DIR) -m libcocotbvpi_icarus build/sim.vvp
 
 # Synth-top spiral kernel. After this rule, synth/kernel_memories.sv is the
@@ -111,8 +123,15 @@ test_synth_line_draw:
 test_synth_spiral:
 	$(MAKE) synth_kernel KERNEL=test_synth_spiral
 	$(MAKE) compile_synth_top
-	iverilog -Pde1_soc.SLOW_CLK_DIV=2 -o build/sim.vvp -s de1_soc -g2012 build/synth_top.v
+	iverilog -Pde1_soc.SLOW_CLK_DIV=2 -Pde1_soc.FB_CLEAR_END_ADDR=63 -o build/sim.vvp -s de1_soc -g2012 build/synth_top.v
 	MODULE=test.test_synth_spiral COCOTB_TEST_MODULES=test.test_synth_spiral vvp -M $(COCOTB_LIB_DIR) -m libcocotbvpi_icarus build/sim.vvp
+
+# Stage 6 gate: 4-thread triangle kernel on the synth top + cocotb sim.
+test_synth_triangle:
+	$(MAKE) synth_kernel KERNEL=test_synth_triangle
+	$(MAKE) compile_synth_top
+	iverilog -Pde1_soc.SLOW_CLK_DIV=2 -Pde1_soc.FB_CLEAR_END_ADDR=63 -o build/sim.vvp -s de1_soc -g2012 build/synth_top.v
+	MODULE=test.test_synth_triangle COCOTB_TEST_MODULES=test.test_synth_triangle vvp -M $(COCOTB_LIB_DIR) -m libcocotbvpi_icarus build/sim.vvp
 
 compile_%:
 	sv2v -w build/$*.v src/$*.sv
@@ -135,14 +154,14 @@ show_%: %.vcd %.gtkw
 test_synth_debug:
 	$(MAKE) synth_kernel KERNEL=test_diverge_ifelse
 	$(MAKE) compile_synth_top
-	iverilog -Pde1_soc.SLOW_CLK_DIV=2 -o build/sim.vvp -s de1_soc -g2012 build/synth_top.v
+	iverilog -Pde1_soc.SLOW_CLK_DIV=2 -Pde1_soc.FB_CLEAR_END_ADDR=63 -o build/sim.vvp -s de1_soc -g2012 build/synth_top.v
 	MODULE=test.test_synth_debug COCOTB_TEST_MODULES=test.test_synth_debug vvp -M $(COCOTB_LIB_DIR) -m libcocotbvpi_icarus build/sim.vvp
 
 # de1_soc store regression: PC=9 STR handshake + mem[16|33..35] (kernel_memories image).
 test_synth_store:
 	$(MAKE) synth_kernel KERNEL=test_diverge_ifelse
 	$(MAKE) compile_synth_top
-	iverilog -Pde1_soc.SLOW_CLK_DIV=2 -o build/sim.vvp -s de1_soc -g2012 build/synth_top.v
+	iverilog -Pde1_soc.SLOW_CLK_DIV=2 -Pde1_soc.FB_CLEAR_END_ADDR=63 -o build/sim.vvp -s de1_soc -g2012 build/synth_top.v
 	MODULE=test.test_synth_store COCOTB_TEST_MODULES=test.test_synth_store vvp -M $(COCOTB_LIB_DIR) -m libcocotbvpi_icarus build/sim.vvp
 
 # sim_harness diverge_ifelse store (bridge + sim_data_ram, no DE1 wrappers).

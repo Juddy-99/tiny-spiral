@@ -182,7 +182,7 @@ In real GPUs, individual threads can branch to different PCs, causing **branch d
 
 ![ISA](/docs/images/isa.png)
 
-tiny-gpu implements a simple 14 instruction ISA built to enable simple kernels for proof-of-concept like matrix addition & matrix multiplication (implementation further down on this page).
+tiny-gpu implements a simple 16-instruction ISA built to enable simple kernels for proof-of-concept like matrix addition & matrix multiplication (implementation further down on this page), along with a graphics path that issues pixel, line, and flat-triangle framebuffer requests.
 
 For these purposes, it supports the following instructions:
 
@@ -195,6 +195,8 @@ For these purposes, it supports the following instructions:
 - `LNS` (opcode `4'b1010`) - Latch the start point for a line in the current thread's LSU. Encoded as `LNS Rd, Rs, Rt` where `Rd` is `x0`, `Rs` is `y0`, and `Rt` is reserved as the per-line data source.
 - `LNE` (opcode `4'b1011`) - Submit a framebuffer line draw using the start point from the previous `LNS` and the endpoint from this instruction. Encoded as `LNE Rd, Rs, Rt` where `Rd` is `x1`, `Rs` is `y1`, and `Rt` is the per-pixel data/color. `LNE` uses the same framebuffer controller and back-pressure path as `STRFB`.
 - `STRFB` (opcode `4'b1100`) - Write a pixel to the framebuffer. Encoded as `STRFB Rd, Rs, Rt` where `Rd` is the framebuffer X coordinate, `Rs` is the framebuffer Y coordinate, and `Rt` is the per-pixel data. While the framebuffer remains monochrome the LSU thresholds `Rt`: writes black when `Rt == 0`, otherwise white. The full 8-bit `Rt` payload is also exported at the GPU top so a future color framebuffer can consume it without an ISA change. `STRFB` reuses the existing scheduler `REQUEST/WAIT` path through a dedicated framebuffer controller, so it back-pressures the warp the same way `STR` does.
+- `TRV` (opcode `4'b1101`) - Latch a triangle vertex in the current thread's LSU. Encoded as `TRV Rd, Rs, Rt` where `Rd` is `x`, `Rs` is `y`, and `Rt` is reserved. The first `TRV` after reset (or after a `TRE` submission) writes vertex `v0`; the next `TRV` writes `v1`. `TRV` does **not** assert `fb_write_valid` and does not stall the warp on framebuffer back-pressure.
+- `TRE` (opcode `4'b1110`) - Submit a flat-color triangle to the framebuffer engine, using the previously latched `v0`/`v1` and `(Rd, Rs)` as `v2`. Encoded as `TRE Rd, Rs, Rt` where `Rd` is `v2.x`, `Rs` is `v2.y`, and `Rt` is the per-triangle data/color (thresholded the same way `STRFB` is). The CLOCK_50-side `fb_triangle_engine` walks scanlines and emits the covered pixels under a left-inclusive / right-exclusive, top-inclusive / bottom-exclusive fill rule (standard top-left rule). `TRE` back-pressures the warp the same way `STR`/`STRFB` do. **Painter ordering and back-face culling are software responsibilities**: the engine only rejects strictly degenerate triangles (`yt == yb` or `cross == 0`); overlapping triangles paint in submission order.
 - `RET` - Signal that the current thread has reached the end of execution.
 
 Each register is specified by 4 bits, meaning that there are 16 total registers. The first 13 register `R0` - `R12` are free registers that support read/write. The last 3 registers are special read-only registers used to supply the `%blockIdx`, `%blockDim`, and `%threadIdx` critical to SIMD.

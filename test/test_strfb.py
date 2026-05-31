@@ -29,7 +29,7 @@ from .helpers.logger import logger
 async def test_strfb(dut):
     program_memory = Memory(dut=dut, addr_bits=8, data_bits=16, channels=1, name="program")
     program = [
-        0x9001,  # PC 0: CONST R0, #1
+        0x9000,  # PC 0: CONST R0, #0
         0xCF0F,  # PC 1: STRFB %threadIdx, R0, %threadIdx
         0xF000,  # PC 2: RET
     ]

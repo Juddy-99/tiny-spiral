@@ -2,7 +2,7 @@
 
 LabsLand bring-up top: [`de1_soc.sv`](de1_soc.sv). Port names match [`lab2/DE1_SoC.sv`](../lab2/DE1_SoC.sv) so pin mapping is automatic.
 
-The GPU runs a fixed kernel from generated [`kernel_memories.sv`](kernel_memories.sv). Default build uses `test_diverge_ifelse` (four threads, if/else on `threadIdx`). The VGA path accepts direct `STRFB` pixel writes and `LNS`/`LNE` line-drawer requests through the same framebuffer bridge. Regenerate with:
+The GPU runs a fixed kernel from generated [`kernel_memories.sv`](kernel_memories.sv). Default build uses `test_diverge_ifelse` (four threads, if/else on `threadIdx`). The VGA path accepts direct `STRFB` pixel writes, `LNS`/`LNE` Bresenham line requests, and `TRV`/`TRE` flat-triangle requests through the same framebuffer bridge. Submission kind is carried by a 2-bit `fb_mode` field (`00`=PIXEL, `01`=LINE, `10`=TRI, `11`=reserved). Regenerate with:
 
 ```bash
 make synth_kernel KERNEL=test_diverge_ifelse
@@ -11,11 +11,12 @@ make synth_kernel KERNEL=test_diverge_ifelse
 ## Bring-up flow
 
 1. Press **KEY[3]** (reset, active low). Release when you want a clean run.
-2. Clock the GPU with either:
+2. After reset deasserts, the framebuffer auto-clears: the VGA module walks all 307,200 pixel addresses writing 0 (~6 ms @ 50 MHz, invisible). During the clear pass the framebuffer bridge refuses new FB requests, so the GPU's LSU stalls in `WAITING` if it gets there first. This guarantees every run starts on a black screen even after pressing **KEY[3]** to re-run.
+3. Clock the GPU with either:
    - **SW[9] = 0** — one `gpu_clk` edge per **KEY[0]** press (single-step), or
    - **SW[9] = 1** — auto clock at ~5 Hz (`SLOW_CLK_DIV` from 50 MHz `CLOCK_50`).
-3. A small boot FSM programs `thread_count` and asserts `start`; no host loader is required.
-4. When the kernel finishes, **LEDR[9]** (`done`) goes high.
+4. A small boot FSM programs `thread_count` and asserts `start`; no host loader is required.
+5. When the kernel finishes, **LEDR[9]** (`done`) goes high.
 
 **KEY[1]** and **KEY[2]** are not wired in this design.
 
@@ -146,6 +147,22 @@ Cocotb tops that exercise this wiring:
 - `make test_synth_top` — PC on **HEX5..HEX4**, **LEDR[9]**, readback at **SW[7:4]=1**
 - `make test_synth_debug` — debug **LEDR** page 0 vs `data_mem_write_valid`
 - `make test_fb_line_engine` — direct pixel and Bresenham line request behavior before the framebuffer
+- `make test_fb_triangle_engine` — standalone triangle rasterizer against the Python golden reference
+- `make test_synth_triangle` — 4-thread `TRV`/`TRV`/`TRE` diamond kernel on the synth top
+- `make test_recip_lut` — Q16 reciprocal LUT sweep used by the triangle engine
+
+## Framebuffer engines
+
+| Mode | Submitting opcode | Engine | Cycles |
+|------|-------------------|--------|--------|
+| `2'b00` PIXEL | `STRFB`         | direct pixel through `fb_line_engine` | 1 |
+| `2'b01` LINE  | `LNS` + `LNE`   | `line_drawer` inside `fb_line_engine` | `max(\|dx\|, \|dy\|) + 1` |
+| `2'b10` TRI   | `TRV` + `TRV` + `TRE` | `fb_triangle_engine` (recip LUT + Q16 DDA) | `~5 + area_pixels + ~rows` |
+
+Only one engine is active per request — the CLOCK_50 bridge selects the
+matching engine on the rising edge after the GPU's submission crosses to
+CLOCK_50. `fb_engine_busy` is the OR of all engine busy lines; `fb_engine_done`
+is the OR of their done pulses.
 
 ## Quartus Signal Tap
 

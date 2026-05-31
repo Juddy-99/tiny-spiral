@@ -25,6 +25,8 @@ module decoder (
     output reg decoded_fb_write_enable,            // Enable writing a pixel to the framebuffer (STRFB)
     output reg decoded_line_start_enable,          // Latch line start point (LNS)
     output reg decoded_line_end_enable,            // Submit line end point (LNE)
+    output reg decoded_tri_vertex_enable,          // Latch a triangle vertex (TRV)
+    output reg decoded_tri_submit_enable,          // Submit triangle (TRE)
     output reg decoded_nzp_write_enable,           // Enable writing to NZP register
     output reg [1:0] decoded_reg_input_mux,        // Select input to register
     output reg [1:0] decoded_alu_arithmetic_mux,   // Select arithmetic operation
@@ -47,6 +49,8 @@ module decoder (
         LNS = 4'b1010,
         LNE = 4'b1011,
         STRFB = 4'b1100,
+        TRV = 4'b1101,
+        TRE = 4'b1110,
         RET = 4'b1111;
 
     always @(posedge clk) begin 
@@ -62,6 +66,8 @@ module decoder (
             decoded_fb_write_enable <= 0;
             decoded_line_start_enable <= 0;
             decoded_line_end_enable <= 0;
+            decoded_tri_vertex_enable <= 0;
+            decoded_tri_submit_enable <= 0;
             decoded_nzp_write_enable <= 0;
             decoded_reg_input_mux <= 0;
             decoded_alu_arithmetic_mux <= 0;
@@ -85,6 +91,8 @@ module decoder (
                 decoded_fb_write_enable <= 0;
                 decoded_line_start_enable <= 0;
                 decoded_line_end_enable <= 0;
+                decoded_tri_vertex_enable <= 0;
+                decoded_tri_submit_enable <= 0;
                 decoded_nzp_write_enable <= 0;
                 decoded_reg_input_mux <= 0;
                 decoded_alu_arithmetic_mux <= 0;
@@ -151,6 +159,18 @@ module decoder (
                         // to the framebuffer. No register / memory / NZP side
                         // effects -- the LSU drives a dedicated FB write port.
                         decoded_fb_write_enable <= 1;
+                    end
+                    TRV: begin
+                        // TRV Rd, Rs, Rt: latch (Rd, Rs) as the next triangle
+                        // vertex slot (v0 then v1, controlled by tri_idx). Rt
+                        // is reserved. Does NOT assert fb_write_valid.
+                        decoded_tri_vertex_enable <= 1;
+                    end
+                    TRE: begin
+                        // TRE Rd, Rs, Rt: submit a triangle to the FB controller
+                        // with the previously-latched (v0, v1) and (Rd, Rs) as
+                        // v2 and Rt as color/data. tri_idx resets after submit.
+                        decoded_tri_submit_enable <= 1;
                     end
                     RET: begin 
                         decoded_ret <= 1;

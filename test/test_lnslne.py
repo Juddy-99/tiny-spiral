@@ -44,7 +44,7 @@ async def test_lnslne_line_requests(dut):
         if int(dut.fb_write_valid.value) == 1:
             recorded.add(
                 (
-                    int(dut.fb_is_line.value),
+                    int(dut.fb_mode.value),
                     int(dut.fb_x0.value),
                     int(dut.fb_y0.value),
                     int(dut.fb_x.value),
