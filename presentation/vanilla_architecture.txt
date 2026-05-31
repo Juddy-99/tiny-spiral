@@ -1,0 +1,305 @@
+Image 1: GPU Architecture Overview
+Overall layout: Two vertically stacked bordered rectangles. The top one is labeled "GPU" and the bottom one is labeled "Global Memory". Both have a small square "collapse" icon (a minus sign inside a small box) in the top-left corner of their title bars.
+
+Top rectangle: "GPU"
+The title "GPU" is centered in bold in the title bar. The interior contains 7 regions stacked vertically from top to bottom:
+
+Device Control Register
+
+A single full-width box with a light orange/peach fill and a darker orange border.
+Text: Device Control Register (monospace font, centered).
+
+
+Dispatcher
+
+A single full-width box with the same light orange/peach fill and darker orange border.
+Text: Dispatcher (monospace font, centered).
+
+
+Compute Core row 1 (two boxes side by side, equal width, separated by a small gap)
+
+Left box: light yellow fill, darker yellow/tan border. Text: Compute (line 1), Core (line 2), centered, monospace.
+Right box: identical styling. Same text: Compute / Core.
+
+
+Compute Core row 2 (two boxes side by side, identical layout to row 1)
+
+Left box: same light yellow fill/border. Text: Compute / Core.
+Right box: same styling. Text: Compute / Core.
+
+
+Cache
+
+A single full-width box with a light green fill and a darker green border.
+Text: Cache (monospace font, centered).
+
+
+Memory Controllers (two boxes side by side, equal width, separated by a small gap)
+
+Left box: light blue/periwinkle fill, darker blue border. Text: Program Memory Controller (monospace, centered).
+Right box: same styling. Text: Data Memory Controller (monospace, centered).
+
+
+
+There are no arrows inside the GPU box — all components are simply stacked/arranged adjacently.
+
+Bottom rectangle: "Global Memory"
+The title "Global Memory" is centered and bold in the title bar. The interior contains two side-by-side boxes of equal width:
+
+Left box: light red/salmon fill, darker red border. Text: Program Memory (monospace, centered).
+Right box: same styling. Text: Data Memory (monospace, centered).
+
+
+Image 2: Compute Core Detail
+Overall layout: Two vertically stacked bordered rectangles. The top (larger) one is labeled "Compute Core" and the bottom (smaller) one is labeled "Key". Both have the same small "collapse" icon (minus sign in a box) in the top-left corner of their title bars.
+
+Top rectangle: "Compute Core"
+Title "Compute Core" is centered and bold in the title bar (light yellow background, matching the Compute Core boxes from Image 1). The interior contains a vertical pipeline of components with arrows, then fans out into two parallel columns of sub-components.
+Top pipeline (single column, centered):
+
+Scheduler
+
+Full-width box, light orange/peach fill, darker orange border.
+Text: Scheduler (monospace, centered).
+A downward arrow exits the bottom center of this box.
+
+
+Fetcher
+
+Full-width box, light blue fill, darker blue border.
+Text: Fetcher (monospace, centered).
+Receives the downward arrow from Scheduler at its top center.
+A downward arrow exits the bottom center of this box.
+
+
+Decoder
+
+Full-width box, light orange/peach fill, darker orange border.
+Text: Decoder (monospace, centered).
+Receives the downward arrow from Fetcher at its top center.
+
+
+
+Fan-out from Decoder:
+From the bottom of the Decoder, lines branch into two parallel columns (left column and right column) and two rows, for four thread structures total (2×2). A single vertical dividing line runs down the center of the diagram separating the left and right columns. Each of the four structures has identical internal layout and the same arrow rules.
+
+Per-structure layout (all four: left-upper, left-lower, right-upper, right-lower):
+Three side-by-side boxes (left to right):
+
+LSU — light blue fill, darker blue border. Text: LSU (monospace, centered).
+ALU — light yellow fill, darker yellow border. Text: ALU (monospace, centered).
+PC — light green fill, darker green border. Text: PC (monospace, centered).
+
+Arrow connections within each structure:
+
+Three downward arrows from the Decoder fan-out bus into the top of LSU, ALU, and PC (one arrow per box).
+A horizontal arrow from PC into ALU (PC → ALU; arrow sits in the gap between PC and ALU and points back toward ALU).
+A downward arrow from LSU into the Registers box directly below this structure (same column, same row slot only).
+A downward arrow from ALU into that same Registers box.
+
+Below the LSU / ALU / PC row in each structure:
+
+Registers — a wide box spanning the width of that column half, light green fill, darker green border. Text: Registers (monospace, centered). Receives only the downward arrows from LSU and ALU in the same structure above it.
+
+Cross-structure rules (do not draw these):
+
+Do not draw arrows from one structure's Registers box to the LSU, ALU, or PC of any other structure (including from upper-row Registers to lower-row LSU/ALU/PC in the same column).
+Do not draw arrows between the left column and the right column except via the shared Decoder fan-out bus above.
+
+Decoder fan-out totals: 12 downward arrows from the Decoder branch (3 per structure × 4 structures).
+
+
+Bottom rectangle: "Key"
+Title "Key" is centered (not bold) in the title bar (white/light gray background). Contains a 2×2 grid of legend entries, each with a small colored square followed by a label:
+Row 1:
+
+Small light orange/peach square (with darker orange border) → label: Control
+Small light green square (with darker green border) → label: Local Memory
+Small light blue square (with darker blue border) → label: Global Memory Access
+
+Row 2:
+
+Small light yellow square (with darker yellow border) → label: Compute
+Small light red/salmon square (with darker red border) → label: Global Memory
+
+(The third column of Row 2 is empty.)
+
+Image 3: Thread Execution Diagram
+Overall layout: A single large bordered rectangle with a white background. Title "Thread Execution" is centered (not bold, monospace font) in the title bar. A small "collapse" icon (minus sign in a small box) is in the top-left corner of the title bar. The interior contains four major components: Register File, ALU, LSU, and PC, plus a Key legend in the bottom-right. Components are connected by three types of signals (arrows), distinguished by color and style.
+
+Signal / Arrow Types (from the Key, bottom-right):
+
+intermediate signal: thin line with open/hollow arrowhead, gray
+instruction signal: thin line with solid filled arrowhead, blue
+control signal: thin line with solid filled arrowhead, red
+
+All other unlabeled arrows with solid black arrowheads are standard data/flow arrows (black).
+
+Key Box (bottom-right)
+A bordered rectangle with a light gray title bar. Title: "Key" (centered, not bold). Contains a small "collapse" icon top-left. Three legend entries (each: colored square + label text):
+
+Light green square (darker green border) → label: Local Memory
+Light yellow square (darker yellow border) → label: Compute
+Light blue square (darker blue border) → label: Global Memory Access
+
+Below the colored squares, three signal type entries:
+
+A gray line with a hollow/open arrowhead → label: "intermediate signal" (gray text)
+A blue line with a solid filled arrowhead → label: "instruction signal" (blue text)
+A red line with a solid filled arrowhead → label: "control signal" (red text)
+
+
+1. Register File (left side)
+A tall box with light green fill and darker green border, positioned on the left side of the diagram. Text: "Register" (line 1), "File" (line 2), centered, monospace font.
+Inputs into Register File:
+
+"reg_write_enable" — red text label above-left of the Register File. A black downward arrow enters the top of the Register File. This is a control signal entering from above.
+Three blue-labeled inputs stack vertically on the left side, each with a blue rightward arrow (instruction signal, solid arrowhead) entering the left edge of the Register File:
+
+"rs_address" (top)
+"rt_address" (middle)
+"rd_address" (bottom)
+
+
+
+Outputs from Register File:
+Three outputs exit the right side of the Register File, all labeled in black monospace text, each with a black rightward arrow:
+
+"rs" — exits upper-right area.
+"rt" — exits middle-right area.
+"rd" — exits lower-right area, routes rightward and then downward into the bottom of the reg_input_mux area (see Center: reg_input_mux section).
+
+Write-back input into Register File:
+
+"rd" — a gray line (intermediate signal, hollow arrowhead) exits the output of the reg_input_mux (center of the diagram) and travels leftward and downward, looping back to enter the bottom of the Register File. The label "rd" appears on this gray line. This is the write-back path — the result selected by the reg_input_mux is written back into the Register File via this arrow entering its bottom edge.
+
+
+2. ALU Box (upper-center)
+A bordered rectangle with light yellow fill and darker yellow/gold border. Title: "ALU" (centered, bold, monospace) in the title bar. Small "collapse" icon top-left.
+Contains two sub-boxes and one mux symbol:
+Sub-boxes inside ALU:
+
+Arithmetic — light yellow fill, darker yellow border. Text: "Arithmetic" (centered, monospace). Positioned upper-left inside ALU.
+Comparison — light yellow fill, darker yellow border. Text: "Comparison" (centered, monospace). Positioned lower-left inside ALU, directly below Arithmetic.
+
+Mux symbol inside ALU (right side):
+A trapezoid/mux shape (drawn as a quadrilateral wider on the left and narrowing to a point or smaller edge on the right, representing a multiplexer). Positioned to the right of the Arithmetic and Comparison boxes. This is the alu_output_mux.
+
+Label "alu_output_mux" appears in red text to the upper-right of this mux shape.
+A black downward arrow enters the top of this mux from above (the alu_arithmetic_mux control line).
+The output of this mux exits rightward out of the ALU box as the signal "alu_out" (black arrow going right).
+
+Control signal into ALU:
+
+"alu_arithmetic_mux" — red text label, positioned above the Arithmetic box inside the ALU boundary. A black downward arrow enters the top of the Arithmetic box from this label. This control line originates from outside/above the ALU box and enters through the top.
+
+Inputs into ALU sub-boxes:
+From the Register File, rs and rt lines enter the ALU:
+
+Into Arithmetic:
+
+"rs" — gray arrow (intermediate signal, hollow arrowhead) enters the left side of the Arithmetic box. Label "rs" on the line.
+"rt" — gray arrow enters the left side of the Arithmetic box below rs. Label "rt" on the line.
+
+
+Into Comparison:
+
+"rs" — gray arrow enters the left side of the Comparison box. Label "rs" on the line.
+"rt" — gray arrow enters the left side of the Comparison box below rs. Label "rt" on the line.
+
+
+
+Outputs from ALU sub-boxes to mux:
+
+A gray arrow exits the right side of Arithmetic and enters the top-left input of the alu_output_mux.
+A gray arrow exits the right side of Comparison and enters the bottom-left input of the alu_output_mux.
+
+Output of ALU:
+
+"alu_out" — a black line exits the right side of the alu_output_mux, travels rightward, exits the ALU box, and continues to the right toward both the PC box and the reg_input_mux (center of diagram).
+
+
+3. LSU Box (lower-center)
+A bordered rectangle with light blue fill and darker blue border. Title: "LSU" (centered, bold, monospace) in the title bar. Small "collapse" icon top-left.
+Contains two sub-boxes:
+Sub-boxes inside LSU:
+
+Load — light blue fill, darker blue border. Text: "Load" (centered, monospace). Positioned upper area inside LSU.
+Store — light blue fill, darker blue border. Text: "Store" (centered, monospace). Positioned lower area inside LSU, below Load with a gap.
+
+Control signals into LSU:
+
+"mem_read_enable" — red text label above the Load box inside the LSU boundary. A black downward arrow enters the top of the Load box.
+"mem_write_enable" — red text label above the Store box inside the LSU boundary. A black downward arrow enters the top of the Store box.
+
+Inputs into LSU sub-boxes:
+
+Into Load:
+
+"rs" — gray arrow (intermediate, hollow arrowhead) enters the left side of the Load box. Label "rs" on the line.
+
+
+Into Store:
+
+"rs" — gray arrow enters the left side of the Store box. Label "rs" on the line.
+"rt" — blue arrow (instruction signal, solid arrowhead) enters the left side of the Store box below rs. Label "rt" on the line.
+
+
+
+Output from LSU:
+
+"lsu_out" — exits the right side of the LSU box (from the Load sub-box area) as a gray line (intermediate signal, hollow arrowhead), traveling rightward toward the reg_input_mux in the center.
+
+
+4. Center: reg_input_mux
+A trapezoid/mux shape (same style as alu_output_mux) positioned in the center of the diagram, to the right of the LSU and below the ALU output, acting as the selector for what value gets written back to the Register File.
+
+Label "reg_input_mux" appears in red text above-left of this mux shape.
+
+Inputs into reg_input_mux (three inputs entering left side, top to bottom):
+
+"alu_out" — gray line (intermediate) from ALU output enters upper input. Label "alu_out" on the line.
+"immediate" — gray line enters middle input. Label "immediate" on the line. This line originates from the left as an instruction signal coming from off-diagram.
+"lsu_out" — gray line from LSU output enters lower input. Label "lsu_out" on the line.
+
+Output from reg_input_mux:
+
+"rd" — a gray line (intermediate signal, hollow arrowhead) exits the right side of the mux. The label "rd" appears on this line. This line then routes leftward and downward, traveling back across the diagram to enter the bottom of the Register File as the write-back value.
+
+
+5. PC Box (upper-right)
+A bordered rectangle with a white/light gray fill and darker gray border (no color fill — plain). Title: "PC" (centered, not bold, monospace) in the title bar. Small "collapse" icon top-left.
+Contains: NZP Register, NZP Tester, two mux symbols, and a +1 box.
+Sub-components inside PC:
+
+NZP Register — light green fill, darker green border. Text: "NZP" (line 1), "Register" (line 2), centered, monospace. Positioned upper-left inside PC.
+NZP Tester — light yellow fill, darker yellow border. Text: "NZP Tester" (centered, monospace). Positioned to the right of NZP Register.
++1 box — small plain box (white fill, gray border). Text: "+1" (centered, monospace). Positioned lower-left inside PC.
+Branch mux — a trapezoid mux shape positioned upper-right inside PC. No explicit label on the mux shape itself; its output is labeled "branch" going rightward to the pc_mux.
+pc_mux — a trapezoid mux shape positioned at the far right inside PC. Label "pc_mux" in red text appears above-right of this mux. Output exits rightward as "next_pc".
+
+Inputs into PC box from outside:
+
+"alu_out" — a black line enters the left side of the PC box and connects to the left input of the NZP Register. Label "alu_out" on the line just outside/at the left edge of PC.
+"nzp_write_enable" — red text label above the NZP Register inside PC boundary. A black downward arrow enters the top of the NZP Register.
+"nzp" — blue text label at the very top of the PC box, above the NZP Tester. A blue downward arrow enters the top of the NZP Tester. Label "nzp" in blue.
+"immediate" — a black line enters from the left side of the PC box at mid-height. Label "immediate" in black appears on this line. It connects to the upper input of the branch mux.
+"current_pc" — a black line enters from the left side of the PC box at lower-mid height. Label "current_pc" in black. It connects into the left side of the +1 box.
+
+Internal connections inside PC:
+
+NZP Register to NZP Tester: a black rightward arrow exits the right of NZP Register and enters the left of NZP Tester.
+NZP Tester to branch mux: a black arrow exits the right of NZP Tester and connects to a control line going into the branch mux.
++1 box output: a black line exits the right of the +1 box, labeled "current_pc + 1", and connects to the lower input of the pc_mux.
+Branch mux output: labeled "branch", a black line exits the right of the branch mux and enters the upper input of the pc_mux.
+pc_mux has a red label "pc_mux" above it; a black downward arrow enters the top of the pc_mux as its control/select signal.
+pc_mux output: exits rightward as "next_pc" — black arrow, label "next_pc" to the right, exiting the PC box on the right edge.
+
+
+Cross-component signal routing summary:
+
+"rs" and "rt" lines from the Register File right outputs branch and route to both ALU (Arithmetic and Comparison sub-boxes) and LSU (Load and Store sub-boxes) as gray intermediate signals.
+"alu_out" from the ALU mux output travels rightward and splits: one branch goes to the reg_input_mux upper input (labeled "alu_out"), another continues further right into the PC box (labeled "alu_out" at PC's left edge).
+"immediate" signal enters the diagram from the left edge at mid-height (blue label, blue arrow), passes through to both the reg_input_mux middle input and the PC box "immediate" input.
+"lsu_out" from LSU travels rightward to the reg_input_mux lower input.
+"rd" exits the right side of the reg_input_mux and routes leftward and downward, re-entering the bottom of the Register File as the write-back value.
