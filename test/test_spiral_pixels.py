@@ -1,4 +1,9 @@
-"""Equiangular spiral kernel cocotb test (interpolated / rotated edition).
+"""Equiangular spiral drawn pixel-by-pixel via STRFB (`test_spiral_pixels`).
+
+This is the original spiral kernel: each emit is one STRFB to a single
+framebuffer pixel. The companion `test_spiral_lines` cocotb test draws the
+same four arms with LNS/LNE line segments through the framebuffer line
+engine, so we can compare the two rendering styles side by side.
 
 Each of the 4 threads draws one spiral arm starting at the center (127, 127)
 of the 256x256 framebuffer region and curving outward toward the screen edge.
@@ -189,7 +194,7 @@ def _expected_writes():
 
 
 @cocotb.test()
-async def test_spiral(dut):
+async def test_spiral_pixels(dut):
     program_memory = Memory(dut=dut, addr_bits=8, data_bits=16, channels=1, name="program")
     data_memory = Memory(dut=dut, addr_bits=8, data_bits=8, channels=4, name="data")
 
@@ -242,7 +247,7 @@ async def test_spiral(dut):
     expected = _expected_writes()
     cycles_per_emit = cycles / (NUM_THREADS * NUM_PTS)
     logger.info(
-        f"spiral kernel completed in {cycles} cycles "
+        f"spiral_pixels kernel completed in {cycles} cycles "
         f"({cycles_per_emit:.2f} gpu_clk cycles per pixel-emit per thread, "
         f"emits/thread = {NUM_PTS})"
     )
