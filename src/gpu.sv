@@ -58,8 +58,7 @@ module gpu #(
     output wire [7:0] fb_y1,
     output wire [7:0] fb_x,
     output wire [7:0] fb_y,
-    output wire [7:0] fb_data,
-    output wire fb_color,
+    output wire [7:0] fb_color,
     input wire fb_write_ready,
 
     output wire [PROGRAM_MEM_ADDR_BITS-1:0] dbg_current_pc,
@@ -114,11 +113,11 @@ module gpu #(
 
     // LSU <> Framebuffer Controller Channels
     // Address = {fb_y, fb_x, fb_y1, fb_x1, fb_y0, fb_x0} (48b), Data =
-    // {fb_mode[1:0], fb_color, fb_data} (11b). One controller channel
-    // serializes all NUM_LSUS write requests. Reads are tied off so the
-    // controller only ever takes the write path.
+    // {fb_mode[1:0], fb_color[7:0]} (10b). fb_color is the 8-bit RGB-3-3-2
+    // pixel color. One controller channel serializes all NUM_LSUS write
+    // requests. Reads are tied off so the controller only takes the write path.
     localparam FB_ADDR_BITS = 48;
-    localparam FB_DATA_BITS = 11;
+    localparam FB_DATA_BITS = 10;
     reg [NUM_LSUS-1:0] lsu_fb_write_valid;
     reg [FB_ADDR_BITS-1:0] lsu_fb_write_address [NUM_LSUS-1:0];
     reg [FB_DATA_BITS-1:0] lsu_fb_write_data [NUM_LSUS-1:0];
@@ -266,9 +265,8 @@ module gpu #(
     assign fb_y1          = fb_mem_write_address_w[31:24];
     assign fb_x           = fb_mem_write_address_w[39:32];
     assign fb_y           = fb_mem_write_address_w[47:40];
-    assign fb_data        = fb_mem_write_data_w[7:0];
-    assign fb_color       = fb_mem_write_data_w[8];
-    assign fb_mode        = fb_mem_write_data_w[10:9];
+    assign fb_color       = fb_mem_write_data_w[7:0];
+    assign fb_mode        = fb_mem_write_data_w[9:8];
 
     // Dispatcher
     dispatch #(
@@ -316,8 +314,7 @@ module gpu #(
             wire [7:0] core_fb_y1 [THREADS_PER_BLOCK-1:0];
             wire [7:0] core_fb_x [THREADS_PER_BLOCK-1:0];
             wire [7:0] core_fb_y [THREADS_PER_BLOCK-1:0];
-            wire [7:0] core_fb_data [THREADS_PER_BLOCK-1:0];
-            wire [THREADS_PER_BLOCK-1:0] core_fb_color;
+            wire [7:0] core_fb_color [THREADS_PER_BLOCK-1:0];
             wire [THREADS_PER_BLOCK-1:0] core_fb_write_ready;
 
             // Pass through signals between LSUs and data memory controller
@@ -342,7 +339,7 @@ module gpu #(
                         core_fb_y0[j], core_fb_x0[j]
                     };
                     lsu_fb_write_data[lsu_index]    <= {
-                        core_fb_mode[j], core_fb_color[j], core_fb_data[j]
+                        core_fb_mode[j], core_fb_color[j]
                     };
 
                     core_lsu_read_ready[j] <= lsu_read_ready[lsu_index];
@@ -388,7 +385,6 @@ module gpu #(
                 .fb_y1(core_fb_y1),
                 .fb_x(core_fb_x),
                 .fb_y(core_fb_y),
-                .fb_data(core_fb_data),
                 .fb_color(core_fb_color),
                 .fb_write_ready(core_fb_write_ready),
 

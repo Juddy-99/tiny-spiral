@@ -184,8 +184,7 @@ module de1_soc #(
     wire [7:0]  gpu_fb_y1;
     wire [7:0]  gpu_fb_x;
     wire [7:0]  gpu_fb_y;
-    wire [7:0]  gpu_fb_data;
-    wire        gpu_fb_color;
+    wire [7:0]  gpu_fb_color;
     wire        gpu_fb_write_ready;
 
     gpu #(
@@ -225,7 +224,6 @@ module de1_soc #(
         .fb_y1(gpu_fb_y1),
         .fb_x(gpu_fb_x),
         .fb_y(gpu_fb_y),
-        .fb_data(gpu_fb_data),
         .fb_color(gpu_fb_color),
         .fb_write_ready(gpu_fb_write_ready),
 
@@ -428,7 +426,7 @@ module de1_soc #(
     reg [7:0] fb_req_y1_gpu;
     reg [7:0] fb_req_x_gpu;
     reg [7:0] fb_req_y_gpu;
-    reg fb_req_color_gpu;
+    reg [7:0] fb_req_color_gpu;
 
     assign gpu_fb_write_ready = fb_req_pending_gpu && (fb_ack_sync_1 == fb_req_toggle_gpu);
 
@@ -445,7 +443,7 @@ module de1_soc #(
             fb_req_y1_gpu <= 8'd0;
             fb_req_x_gpu <= 8'd0;
             fb_req_y_gpu <= 8'd0;
-            fb_req_color_gpu <= 1'b0;
+            fb_req_color_gpu <= 8'd0;
         end else begin
             fb_ack_sync_0 <= fb_ack_toggle_clk50;
             fb_ack_sync_1 <= fb_ack_sync_0;
@@ -482,7 +480,7 @@ module de1_soc #(
     reg [10:0] fb_engine_y1;
     reg [10:0] fb_engine_x2;
     reg [10:0] fb_engine_y2;
-    reg fb_engine_color;
+    reg [7:0] fb_engine_color;
 
     reg line_start_pulse;
     reg tri_start_pulse;
@@ -491,14 +489,14 @@ module de1_soc #(
     wire line_engine_busy;
     wire [10:0] line_engine_x;
     wire [10:0] line_engine_y;
-    wire line_engine_pixel_color;
+    wire [7:0] line_engine_pixel_color;
     wire line_engine_pixel_write;
 
     wire tri_engine_done;
     wire tri_engine_busy;
     wire [10:0] tri_engine_x;
     wire [10:0] tri_engine_y;
-    wire tri_engine_pixel_color;
+    wire [7:0] tri_engine_pixel_color;
     wire tri_engine_pixel_write;
 
     wire fb_engine_done = line_engine_done | tri_engine_done;
@@ -515,7 +513,7 @@ module de1_soc #(
     // on pixel_write picks the active engine cleanly.
     wire [10:0] fb_engine_pixel_x     = tri_engine_busy ? tri_engine_x : line_engine_x;
     wire [10:0] fb_engine_pixel_y     = tri_engine_busy ? tri_engine_y : line_engine_y;
-    wire        fb_engine_pixel_color = tri_engine_busy ? tri_engine_pixel_color : line_engine_pixel_color;
+    wire [7:0]  fb_engine_pixel_color = tri_engine_busy ? tri_engine_pixel_color : line_engine_pixel_color;
     wire        fb_engine_pixel_write = line_engine_pixel_write | tri_engine_pixel_write;
 
     always @(posedge CLOCK_50 or posedge reset_btn) begin
@@ -533,7 +531,7 @@ module de1_soc #(
             fb_engine_y1 <= 11'd0;
             fb_engine_x2 <= 11'd0;
             fb_engine_y2 <= 11'd0;
-            fb_engine_color <= 1'b0;
+            fb_engine_color <= 8'd0;
         end else begin
             fb_req_sync_0 <= fb_req_toggle_gpu;
             fb_req_sync_1 <= fb_req_sync_0;

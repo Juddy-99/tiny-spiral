@@ -51,8 +51,7 @@ module core #(
     output reg [7:0] fb_y1 [THREADS_PER_BLOCK-1:0],
     output reg [7:0] fb_x [THREADS_PER_BLOCK-1:0],
     output reg [7:0] fb_y [THREADS_PER_BLOCK-1:0],
-    output reg [7:0] fb_data [THREADS_PER_BLOCK-1:0],
-    output reg [THREADS_PER_BLOCK-1:0] fb_color,
+    output reg [7:0] fb_color [THREADS_PER_BLOCK-1:0],
     input reg [THREADS_PER_BLOCK-1:0] fb_write_ready,
 
     output wire [PROGRAM_MEM_ADDR_BITS-1:0] dbg_current_pc,
@@ -279,7 +278,6 @@ module core #(
                 .fb_y1(fb_y1[i]),
                 .fb_x(fb_x[i]),
                 .fb_y(fb_y[i]),
-                .fb_data(fb_data[i]),
                 .fb_color(fb_color[i]),
                 .fb_write_ready(fb_write_ready[i]),
                 .rs(rs[i]),

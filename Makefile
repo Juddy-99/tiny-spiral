@@ -1,4 +1,4 @@
-.PHONY: test compile compile_synth compile_synth_top synth_kernel test_line_drawer test_fb_line_engine test_recip_lut test_fb_triangle_engine test_mem_bridge test_synth_top test_synth_line_draw test_synth_spiral test_synth_triangle test_synth_debug test_synth_store test_harness_store
+.PHONY: test compile compile_synth compile_synth_top synth_kernel test_line_drawer test_fb_line_engine test_recip_lut test_fb_triangle_engine test_mem_bridge test_synth_top test_synth_line_draw test_synth_spiral test_synth_triangle test_synth_triangles_random test_synth_debug test_synth_store test_harness_store
 
 # Prefer repo .venv for cocotb (cocotb-config + VPI) without manually activating it.
 # Use an absolute path for $(shell ...) — exported PATH is not always visible to
@@ -132,6 +132,15 @@ test_synth_triangle:
 	$(MAKE) compile_synth_top
 	iverilog -Pde1_soc.SLOW_CLK_DIV=2 -Pde1_soc.FB_CLEAR_END_ADDR=63 -o build/sim.vvp -s de1_soc -g2012 build/synth_top.v
 	MODULE=test.test_synth_triangle COCOTB_TEST_MODULES=test.test_synth_triangle vvp -M $(COCOTB_LIB_DIR) -m libcocotbvpi_icarus build/sim.vvp
+
+# Color gate: 4-thread random colored-triangle kernel on the synth top.
+# After this rule, synth/kernel_memories.sv is the uploadable DE1-SoC image
+# for four differently-sized, differently-colored triangles.
+test_synth_triangles_random:
+	$(MAKE) synth_kernel KERNEL=test_synth_triangles_random
+	$(MAKE) compile_synth_top
+	iverilog -Pde1_soc.SLOW_CLK_DIV=2 -Pde1_soc.FB_CLEAR_END_ADDR=63 -o build/sim.vvp -s de1_soc -g2012 build/synth_top.v
+	MODULE=test.test_synth_triangles_random COCOTB_TEST_MODULES=test.test_synth_triangles_random vvp -M $(COCOTB_LIB_DIR) -m libcocotbvpi_icarus build/sim.vvp
 
 compile_%:
 	sv2v -w build/$*.v src/$*.sv

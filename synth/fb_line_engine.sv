@@ -14,10 +14,10 @@ module fb_line_engine (
     input wire [10:0] y0,
     input wire [10:0] x1,
     input wire [10:0] y1,
-    input wire pixel_color_in,
+    input wire [7:0] pixel_color_in,
     output wire [10:0] x,
     output wire [10:0] y,
-    output wire pixel_color,
+    output wire [7:0] pixel_color,
     output wire pixel_write,
     output reg done,
     output wire busy
@@ -29,7 +29,7 @@ module fb_line_engine (
 
     reg [1:0] state;
     reg line_start;
-    reg color_q;
+    reg [7:0] color_q;
     reg [10:0] direct_x;
     reg [10:0] direct_y;
 
@@ -64,7 +64,7 @@ module fb_line_engine (
         if (reset) begin
             state <= IDLE;
             line_start <= 1'b0;
-            color_q <= 1'b0;
+            color_q <= 8'd0;
             direct_x <= 11'd0;
             direct_y <= 11'd0;
             done <= 1'b0;

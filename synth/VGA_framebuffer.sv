@@ -53,7 +53,8 @@ module VGA_framebuffer(clk50, reset, x, y, pixel_color, pixel_write,
 
     input logic clk50, reset;
     input logic [10:0] x, y;  // Pixel coordinates
-    input logic pixel_color, pixel_write;
+    input logic [7:0] pixel_color;  // 8-bit RGB-3-3-2 color
+    input logic pixel_write;
     output logic clearing;  // High while clear-on-reset FSM is walking the framebuffer.
     output logic [7:0] VGA_R, VGA_G, VGA_B;
     output logic VGA_CLK, VGA_HS, VGA_VS, VGA_BLANK_n, VGA_SYNC_n;
@@ -63,9 +64,9 @@ module VGA_framebuffer(clk50, reset, x, y, pixel_color, pixel_write,
     logic [9:0] vcount;  // Vertical counter
     logic endOfField;
     logic blank;
-    logic framebuffer [307199:0];  // Framebuffer memory: 640 x 480 = 307200 bits
+    logic [7:0] framebuffer [307199:0];  // Framebuffer: 640 x 480 x 8-bit RGB-3-3-2
     logic [18:0] read_address, write_address;
-    logic pixel_read;
+    logic [7:0] pixel_read;
 
     // potentially have students write updating hcount and vcount
 
@@ -124,7 +125,7 @@ module VGA_framebuffer(clk50, reset, x, y, pixel_color, pixel_write,
 
     wire        fb_we   = clearing | pixel_write;
     wire [18:0] fb_addr = clearing ? clear_addr   : write_address;
-    wire        fb_data = clearing ? 1'b0         : pixel_color;
+    wire [7:0]  fb_data = clearing ? 8'b0         : pixel_color;
 
     always_ff @(posedge clk50)
     begin
@@ -139,7 +140,11 @@ module VGA_framebuffer(clk50, reset, x, y, pixel_color, pixel_write,
 
     assign VGA_CLK = hcount[0];  // 25 MHz clock: pixel latched on rising edge
 
-    // decode black/white signal into RGB values
-    assign {VGA_R, VGA_G, VGA_B} = pixel_read ? 24'hFF_FF_FF : 24'h0;
+    // Decode 8-bit RGB-3-3-2 pixel into 8-bit-per-channel VGA output.
+    // pixel byte = {R[2:0], G[2:0], B[1:0]}; each field is bit-replicated up to
+    // 8 bits so a maxed field maps to 0xFF and a zero field maps to 0x00.
+    assign VGA_R = {pixel_read[7:5], pixel_read[7:5], pixel_read[7:6]};
+    assign VGA_G = {pixel_read[4:2], pixel_read[4:2], pixel_read[4:3]};
+    assign VGA_B = {pixel_read[1:0], pixel_read[1:0], pixel_read[1:0], pixel_read[1:0]};
 
 endmodule  // VGA_framebuffer

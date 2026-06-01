@@ -35,10 +35,10 @@ module fb_triangle_engine (
     input  wire [10:0] y1,
     input  wire [10:0] x2,
     input  wire [10:0] y2,
-    input  wire        pixel_color_in,
+    input  wire [7:0]  pixel_color_in,
     output wire [10:0] x,
     output wire [10:0] y,
-    output wire        pixel_color,
+    output wire [7:0]  pixel_color,
     output wire        pixel_write,
     output reg         done,
     output wire        busy
@@ -56,7 +56,7 @@ module fb_triangle_engine (
 
     // Latched input vertices (registered from IDLE -> SORT transition).
     reg [10:0] x0_r, y0_r, x1_r, y1_r, x2_r, y2_r;
-    reg        color_r;
+    reg [7:0]  color_r;
 
     // Sorted vertices (registered in SORT).
     reg [10:0] xt, yt, xm, ym, xb_v, yb_v;
@@ -194,7 +194,7 @@ module fb_triangle_engine (
             y1_r        <= 11'd0;
             x2_r        <= 11'd0;
             y2_r        <= 11'd0;
-            color_r     <= 1'b0;
+            color_r     <= 8'd0;
             xt          <= 11'd0;
             yt          <= 11'd0;
             xm          <= 11'd0;

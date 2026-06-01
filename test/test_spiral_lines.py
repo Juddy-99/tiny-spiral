@@ -137,7 +137,7 @@ program = [
 def _expected_line_requests():
     """Mirror the LNE requests the kernel will emit.
 
-    Each LNE produces one (mode=1, x0, y0, x1=fb_x, y1=fb_y, data, color)
+    Each LNE produces one (mode=1, x0, y0, x1=fb_x, y1=fb_y, color)
     tuple. The latched (x0, y0) is the prior endpoint; (x1, y1) is the current.
     """
     out = set()
@@ -148,8 +148,8 @@ def _expected_line_requests():
             y0 = data[base + s - 1 + Y_OFFSET]
             x1 = data[base + s]
             y1 = data[base + s + Y_OFFSET]
-            # mode=1 (line), data=1, color=1 (rt != 0).
-            out.add((1, x0, y0, x1, y1, 1, 1))
+            # mode=1 (line), color=1 (8-bit RGB-3-3-2, Rt passthrough).
+            out.add((1, x0, y0, x1, y1, 1))
     return out
 
 
@@ -192,7 +192,6 @@ async def test_spiral_lines(dut):
                 int(dut.fb_y0.value),
                 int(dut.fb_x.value),
                 int(dut.fb_y.value),
-                int(dut.fb_data.value),
                 int(dut.fb_color.value),
             )
             if sample != last_seen:

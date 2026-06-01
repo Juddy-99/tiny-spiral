@@ -69,8 +69,7 @@ module sim_harness #(
     wire [7:0] fb_y1_nc;
     wire [7:0] fb_x_nc;
     wire [7:0] fb_y_nc;
-    wire [7:0] fb_data_nc;
-    wire fb_color_nc;
+    wire [7:0] fb_color_nc;
 
     gpu #(
         .DATA_MEM_ADDR_BITS(DATA_MEM_ADDR_BITS),
@@ -109,7 +108,6 @@ module sim_harness #(
         .fb_y1(fb_y1_nc),
         .fb_x(fb_x_nc),
         .fb_y(fb_y_nc),
-        .fb_data(fb_data_nc),
         .fb_color(fb_color_nc),
         .fb_write_ready(1'b1),
 

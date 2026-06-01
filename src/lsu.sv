@@ -53,7 +53,7 @@ module lsu (
     //   PIXEL: (fb_x, fb_y) -> one pixel
     //   LINE:  (fb_x0, fb_y0) -> (fb_x, fb_y)
     //   TRI:   v0=(fb_x0,fb_y0), v1=(fb_x1,fb_y1), v2=(fb_x,fb_y)
-    // fb_color is the monochrome thresholded pixel value (rt != 0).
+    // fb_color is the 8-bit RGB-3-3-2 pixel color (Rt passed through directly).
     output reg fb_write_valid,
     output reg [1:0] fb_mode,
     output reg [7:0] fb_x0,
@@ -62,8 +62,7 @@ module lsu (
     output reg [7:0] fb_y1,
     output reg [7:0] fb_x,
     output reg [7:0] fb_y,
-    output reg [7:0] fb_data,
-    output reg fb_color,
+    output reg [7:0] fb_color,
     input reg fb_write_ready,
 
     // LSU Outputs
@@ -100,7 +99,6 @@ module lsu (
             fb_y1 <= 0;
             fb_x <= 0;
             fb_y <= 0;
-            fb_data <= 0;
             fb_color <= 0;
             line_x0 <= 0;
             line_y0 <= 0;
@@ -187,11 +185,8 @@ module lsu (
                         fb_y1 <= 0;
                         fb_x <= rd_val;
                         fb_y <= rs;
-                        fb_data <= rt;
-                        // Monochrome thresholding: any nonzero pixel data => white.
-                        // Future color upgrade swaps this for a passthrough or palette
-                        // lookup without touching the rest of the pipeline.
-                        fb_color <= (rt != 8'b0);
+                        // 8-bit RGB-3-3-2 color: pass Rt through directly.
+                        fb_color <= rt;
                         lsu_state <= WAITING;
                     end
                     WAITING: begin
@@ -247,8 +242,7 @@ module lsu (
                         fb_y1 <= 0;
                         fb_x <= rd_val;
                         fb_y <= rs;
-                        fb_data <= rt;
-                        fb_color <= (rt != 8'b0);
+                        fb_color <= rt;
                         lsu_state <= WAITING;
                     end
                     WAITING: begin
@@ -315,8 +309,7 @@ module lsu (
                         fb_y1 <= tri_v1_y;
                         fb_x <= rd_val;
                         fb_y <= rs;
-                        fb_data <= rt;
-                        fb_color <= (rt != 8'b0);
+                        fb_color <= rt;
                         lsu_state <= WAITING;
                     end
                     WAITING: begin

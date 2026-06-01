@@ -49,7 +49,6 @@ async def test_lnslne_line_requests(dut):
                     int(dut.fb_y0.value),
                     int(dut.fb_x.value),
                     int(dut.fb_y.value),
-                    int(dut.fb_data.value),
                     int(dut.fb_color.value),
                 )
             )
@@ -60,10 +59,10 @@ async def test_lnslne_line_requests(dut):
             assert False, f"LNS/LNE kernel hung after {cycles} cycles"
 
     expected = {
-        (1, 0, 0, 0, 5, 1, 1),
-        (1, 1, 0, 1, 5, 1, 1),
-        (1, 2, 0, 2, 5, 1, 1),
-        (1, 3, 0, 3, 5, 1, 1),
+        (1, 0, 0, 0, 5, 1),
+        (1, 1, 0, 1, 5, 1),
+        (1, 2, 0, 2, 5, 1),
+        (1, 3, 0, 3, 5, 1),
     }
     assert recorded == expected, (
         f"line request set mismatch: expected {sorted(expected)}, got {sorted(recorded)}"

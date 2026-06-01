@@ -189,7 +189,7 @@ def _expected_writes():
             dy = (ys[s] - CX) & 0xFF
             x_t = (a * dx + b * dy + CX) & 0xFF
             y_t = (c * dx + d * dy + CX) & 0xFF
-            out.add((x_t, y_t, 1, 1))
+            out.add((x_t, y_t, 1))
     return out
 
 
@@ -226,9 +226,8 @@ async def test_spiral_pixels(dut):
         if int(dut.fb_write_valid.value) == 1:
             x = int(dut.fb_x.value)
             y = int(dut.fb_y.value)
-            d = int(dut.fb_data.value)
             c = int(dut.fb_color.value)
-            sample = (x, y, d, c)
+            sample = (x, y, c)
             if sample != last_seen:
                 recorded_writes.add(sample)
                 last_seen = sample

@@ -3,14 +3,15 @@
 Kernel: 4 threads, each thread writes one framebuffer pixel.
 
   CONST R0, #0                ; R0 = 0
-  STRFB %threadIdx, R0, %threadIdx   ; FB[x=tid, y=0] = tid (color = tid != 0)
+  STRFB %threadIdx, R0, %threadIdx   ; FB[x=tid, y=0] = tid (8-bit color = tid)
   RET
 
-Expected framebuffer writes (order-independent; arbitration is not specified):
-    (x=0, y=0, data=0, color=0)
-    (x=1, y=0, data=1, color=1)
-    (x=2, y=0, data=2, color=1)
-    (x=3, y=0, data=3, color=1)
+Expected framebuffer writes (order-independent; arbitration is not specified).
+fb_color is the 8-bit RGB-3-3-2 color, passed straight through from Rt:
+    (x=0, y=0, color=0)
+    (x=1, y=0, color=1)
+    (x=2, y=0, color=2)
+    (x=3, y=0, color=3)
 
 Drives `dut.fb_write_ready = 1` unconditionally and samples the FB write port
 on every rising clock edge. This exercises the full STRFB path: decoder ->
@@ -67,11 +68,10 @@ async def test_strfb(dut):
         if int(dut.fb_write_valid.value) == 1:
             x = int(dut.fb_x.value)
             y = int(dut.fb_y.value)
-            d = int(dut.fb_data.value)
             c = int(dut.fb_color.value)
-            recorded_writes.add((x, y, d, c))
+            recorded_writes.add((x, y, c))
             logger.info(
-                f"cycle {cycles}: FB write x={x} y={y} data={d} color={c}"
+                f"cycle {cycles}: FB write x={x} y={y} color={c}"
             )
 
         await RisingEdge(dut.clk)
@@ -85,10 +85,10 @@ async def test_strfb(dut):
     )
 
     expected = {
-        (0, 0, 0, 0),
-        (1, 0, 1, 1),
-        (2, 0, 2, 1),
-        (3, 0, 3, 1),
+        (0, 0, 0),
+        (1, 0, 1),
+        (2, 0, 2),
+        (3, 0, 3),
     }
     assert recorded_writes == expected, (
         f"FB write set mismatch: expected {sorted(expected)}, "

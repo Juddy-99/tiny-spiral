@@ -92,7 +92,6 @@ async def test_trv_tre_ladders(dut):
                 "x1": int(dut.fb_x1.value), "y1": int(dut.fb_y1.value),
                 "x":  int(dut.fb_x.value),  "y":  int(dut.fb_y.value),
                 "color": int(dut.fb_color.value),
-                "data":  int(dut.fb_data.value),
                 "cycle": cycles,
             })
         await RisingEdge(dut.clk)
