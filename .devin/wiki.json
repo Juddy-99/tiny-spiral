@@ -1,0 +1,263 @@
+{
+  "repo_notes": [
+    {
+      "content": ""
+    }
+  ],
+  "pages": [
+    {
+      "title": "Overview",
+      "purpose": "Introduce the tiny-gpu repository, explaining its educational purpose and the core concepts of GPU architecture it demonstrates",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Architecture Overview",
+      "purpose": "Provide a high-level overview of the tiny-gpu architecture, including the core components and their relationships",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Memory System",
+      "purpose": "Explain the memory hierarchy, including program memory, data memory, and potential cache implementation",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Execution Model",
+      "purpose": "Detail how instructions are executed across multiple threads and cores in the tiny-gpu architecture",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Hardware Modules",
+      "purpose": "Provide an introduction to the various hardware modules that make up the tiny-gpu",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "GPU Module",
+      "purpose": "Explain the top-level GPU module, its parameters, interfaces, and how it connects other modules",
+      "parent": "Hardware Modules",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Core Module",
+      "purpose": "Detail the core module which processes blocks of threads, including its internal architecture",
+      "parent": "Hardware Modules",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Thread Execution Units",
+      "purpose": "Provide an overview of the units that handle thread execution within a core",
+      "parent": "Hardware Modules",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "ALU (Arithmetic Logic Unit)",
+      "purpose": "Explain the ALU module which performs arithmetic and logical operations",
+      "parent": "Hardware Modules",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "LSU (Load/Store Unit)",
+      "purpose": "Detail the LSU module which handles memory access operations",
+      "parent": "Hardware Modules",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "PC (Program Counter)",
+      "purpose": "Explain the PC module which calculates the next program counter for each thread",
+      "parent": "Hardware Modules",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Register File",
+      "purpose": "Detail the registers module which implements register files for each thread",
+      "parent": "Hardware Modules",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Fetcher and Decoder",
+      "purpose": "Explain the modules responsible for fetching and decoding instructions",
+      "parent": "Hardware Modules",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Memory Controllers",
+      "purpose": "Detail the memory controller modules that manage access to program and data memory",
+      "parent": "Hardware Modules",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Dispatcher and Device Control",
+      "purpose": "Explain the dispatcher module that manages thread distribution to cores and the device control register",
+      "parent": "Hardware Modules",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Instruction Set Architecture (ISA)",
+      "purpose": "Provide an overview of the tiny-gpu instruction set architecture",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Instruction Format",
+      "purpose": "Detail the format of instructions in the tiny-gpu ISA",
+      "parent": "Instruction Set Architecture (ISA)",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Instruction Types",
+      "purpose": "Explain the different types of instructions supported by the tiny-gpu ISA",
+      "parent": "Instruction Set Architecture (ISA)",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Programming Model",
+      "purpose": "Explain the programming model used in tiny-gpu, including threads, blocks, and kernels",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Matrix Addition Example",
+      "purpose": "Walk through the matrix addition kernel as an example of programming the tiny-gpu",
+      "parent": "Programming Model",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Matrix Multiplication Example",
+      "purpose": "Walk through the matrix multiplication kernel as a more complex example",
+      "parent": "Programming Model",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Build and Testing",
+      "purpose": "Explain how to build the tiny-gpu and run the test suite",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Build System",
+      "purpose": "Detail the build system implemented by the Makefile",
+      "parent": "Build and Testing",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Testing Framework",
+      "purpose": "Explain the cocotb-based testing framework used to verify the tiny-gpu's functionality",
+      "parent": "Build and Testing",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Memory Simulation",
+      "purpose": "Detail how memory is simulated in the testing environment",
+      "parent": "Build and Testing",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Hardware Implementation",
+      "purpose": "Discuss the physical implementation aspects of the tiny-gpu",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    }
+  ]
+}
