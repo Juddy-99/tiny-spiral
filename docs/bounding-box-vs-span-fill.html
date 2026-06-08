@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Triangle Rasterization Demo</title>
+<title>Step-by-Step Triangle Rasterization Demo</title>
 <style>
   body {
     font-family: system-ui, sans-serif;
@@ -11,10 +11,32 @@
     margin: 24px;
   }
 
+  .controls {
+    margin-bottom: 18px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    align-items: center;
+  }
+
+  button {
+    padding: 6px 10px;
+  }
+
+  label {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+  }
+
   .row {
     display: flex;
     gap: 24px;
     align-items: flex-start;
+  }
+
+  .panel {
+    width: 360px;
   }
 
   canvas {
@@ -23,18 +45,666 @@
     background: #111;
   }
 
-  .panel {
-    width: 360px;
-  }
-
-  button {
-    margin-right: 8px;
-    margin-bottom: 12px;
-    padding: 6px 10px;
+  .stats {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.4;
+    background: #2b2b2b;
+    padding: 10px;
+    border-radius: 6px;
+    margin-top: 10px;
+    white-space: pre-line;
   }
 
   code {
     background: #333;
+    padding: 2px 4px;
+    border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Step-by-Step Triangle Rasterization Demo</h1>
+
+<p>
+  Both canvases draw the same triangle onto a tiny <code>80×60</code> framebuffer,
+  then scale it up. The left side uses a bounding-box edge-function test.
+  The right side uses scanline span filling.
+</p>
+
+<div class="controls">
+  <button onclick="stepBoth()">Step</button>
+  <button onclick="toggleAuto()" id="autoButton">Auto-run</button>
+  <button onclick="resetRasterizers()">Reset</button>
+  <button onclick="randomizeTriangle()">Random triangle</button>
+  <button onclick="useExampleTriangle()">Example triangle</button>
+
+  <label>
+    Speed
+    <input
+      id="speedSlider"
+      type="range"
+      min="20"
+      max="1000"
+      value="150"
+      step="10"
+      oninput="updateSpeedLabel()"
+    />
+    <span id="speedLabel">150 ms</span>
+  </label>
+</div>
+
+<div class="row">
+  <div class="panel">
+    <h2>Bounding box + edge functions</h2>
+    <canvas id="edgeCanvas" width="320" height="240"></canvas>
+    <div class="stats" id="edgeStats"></div>
+    <p>
+      This method visits every pixel in the triangle's bounding box.
+      The yellow pixel is the current candidate. Blue pixels are accepted.
+      Dim red pixels were tested and rejected.
+    </p>
+  </div>
+
+  <div class="panel">
+    <h2>Scanline / span fill</h2>
+    <canvas id="scanCanvas" width="320" height="240"></canvas>
+    <div class="stats" id="scanStats"></div>
+    <p>
+      This method advances row by row. It computes intersections with the
+      triangle edges, then fills horizontal spans. Orange pixels are accepted.
+      The yellow pixel is the current span pixel.
+    </p>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/*
+  Tiny logical framebuffer, scaled up for visibility.
+
+  This resembles a small FPGA/VGA design:
+    - low-resolution framebuffer
+    - explicit pixel writes
+    - simple integer-ish coordinates
+    - later scanout to VGA
+*/
+
+const FB_WIDTH = 80;
+const FB_HEIGHT = 60;
+const SCALE = 4;
+
+const edgeCanvas = document.getElementById("edgeCanvas");
+const scanCanvas = document.getElementById("scanCanvas");
+
+const edgeCtx = edgeCanvas.getContext("2d");
+const scanCtx = scanCanvas.getContext("2d");
+
+const edgeStats = document.getElementById("edgeStats");
+const scanStats = document.getElementById("scanStats");
+
+const speedSlider = document.getElementById("speedSlider");
+const speedLabel = document.getElementById("speedLabel");
+const autoButton = document.getElementById("autoButton");
+
+let autoTimer = null;
+
+let triangle = [
+  { x: 12, y: 10 },
+  { x: 65, y: 18 },
+  { x: 28, y: 50 }
+];
+
+/*
+  The demo keeps persistent state for each rasterizer.
+
+  Instead of drawing the whole triangle at once, each rasterizer exposes
+  a step function. Each step advances the algorithm by one meaningful unit.
+*/
+
+let edgeState;
+let scanState;
+
+function clearCanvas(ctx) {
+  ctx.fillStyle = "#111";
+  ctx.fillRect(0, 0, FB_WIDTH * SCALE, FB_HEIGHT * SCALE);
+}
+
+function putPixel(ctx, x, y, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x * SCALE, y * SCALE, SCALE, SCALE);
+}
+
+function drawGrid(ctx) {
+  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  ctx.lineWidth = 1;
+
+  for (let x = 0; x <= FB_WIDTH; x += 10) {
+    ctx.beginPath();
+    ctx.moveTo(x * SCALE, 0);
+    ctx.lineTo(x * SCALE, FB_HEIGHT * SCALE);
+    ctx.stroke();
+  }
+
+  for (let y = 0; y <= FB_HEIGHT; y += 10) {
+    ctx.beginPath();
+    ctx.moveTo(0, y * SCALE);
+    ctx.lineTo(FB_WIDTH * SCALE, y * SCALE);
+    ctx.stroke();
+  }
+}
+
+function drawTriangleOutline(ctx, tri) {
+  ctx.strokeStyle = "white";
+  ctx.lineWidth = 2;
+
+  ctx.beginPath();
+  ctx.moveTo(tri[0].x * SCALE, tri[0].y * SCALE);
+  ctx.lineTo(tri[1].x * SCALE, tri[1].y * SCALE);
+  ctx.lineTo(tri[2].x * SCALE, tri[2].y * SCALE);
+  ctx.closePath();
+  ctx.stroke();
+
+  for (const p of tri) {
+    ctx.fillStyle = "white";
+    ctx.beginPath();
+    ctx.arc(p.x * SCALE, p.y * SCALE, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function renderStaticBackgrounds() {
+  clearCanvas(edgeCtx);
+  clearCanvas(scanCtx);
+
+  drawGrid(edgeCtx);
+  drawGrid(scanCtx);
+
+  drawTriangleOutline(edgeCtx, triangle);
+  drawTriangleOutline(scanCtx, triangle);
+}
+
+/*
+  ----------------------------------------------------------------------
+  Edge-function rasterizer setup
+  ----------------------------------------------------------------------
+*/
+
+function edgeFunction(a, b, p) {
+  return (p.x - a.x) * (b.y - a.y) -
+         (p.y - a.y) * (b.x - a.x);
+}
+
+function makeEdgeState(tri) {
+  const [a, b, c] = tri;
+
+  const minX = Math.max(0, Math.floor(Math.min(a.x, b.x, c.x)));
+  const maxX = Math.min(FB_WIDTH - 1, Math.ceil(Math.max(a.x, b.x, c.x)));
+  const minY = Math.max(0, Math.floor(Math.min(a.y, b.y, c.y)));
+  const maxY = Math.min(FB_HEIGHT - 1, Math.ceil(Math.max(a.y, b.y, c.y)));
+
+  const area = edgeFunction(a, b, c);
+
+  return {
+    tri,
+    minX,
+    maxX,
+    minY,
+    maxY,
+    x: minX,
+    y: minY,
+    tested: 0,
+    accepted: 0,
+    rejected: 0,
+    done: area === 0,
+    degenerate: area === 0,
+    lastPixel: null
+  };
+}
+
+/*
+  One edge-function step = test one candidate pixel.
+*/
+
+function stepEdgeRasterizer() {
+  if (edgeState.done) return;
+
+  const [a, b, c] = edgeState.tri;
+  const x = edgeState.x;
+  const y = edgeState.y;
+
+  const p = { x: x + 0.5, y: y + 0.5 };
+
+  const w0 = edgeFunction(b, c, p);
+  const w1 = edgeFunction(c, a, p);
+  const w2 = edgeFunction(a, b, p);
+
+  const inside =
+    (w0 >= 0 && w1 >= 0 && w2 >= 0) ||
+    (w0 <= 0 && w1 <= 0 && w2 <= 0);
+
+  edgeState.tested++;
+
+  if (inside) {
+    edgeState.accepted++;
+    putPixel(edgeCtx, x, y, "#4da3ff");
+  } else {
+    edgeState.rejected++;
+    putPixel(edgeCtx, x, y, "rgba(255,80,80,0.28)");
+  }
+
+  edgeState.lastPixel = { x, y, inside };
+
+  // Advance to the next pixel in the bounding box.
+  edgeState.x++;
+
+  if (edgeState.x > edgeState.maxX) {
+    edgeState.x = edgeState.minX;
+    edgeState.y++;
+  }
+
+  if (edgeState.y > edgeState.maxY) {
+    edgeState.done = true;
+  }
+}
+
+/*
+  ----------------------------------------------------------------------
+  Scanline rasterizer setup
+  ----------------------------------------------------------------------
+*/
+
+function makeScanState(tri) {
+  const [a, b, c] = tri;
+
+  const minY = Math.max(0, Math.floor(Math.min(a.y, b.y, c.y)));
+  const maxY = Math.min(FB_HEIGHT - 1, Math.ceil(Math.max(a.y, b.y, c.y)));
+
+  return {
+    tri,
+    minY,
+    maxY,
+    y: minY,
+
+    // Current span.
+    spanActive: false,
+    spanStartX: 0,
+    spanEndX: -1,
+    x: 0,
+
+    scanlinesVisited: 0,
+    spansGenerated: 0,
+    pixelsWritten: 0,
+    emptyScanlines: 0,
+
+    done: false,
+    degenerate: edgeFunction(a, b, c) === 0,
+    lastPixel: null,
+    lastSpan: null
+  };
+}
+
+function computeSpanForScanline(tri, y) {
+  const [a, b, c] = tri;
+  const edges = [
+    [a, b],
+    [b, c],
+    [c, a]
+  ];
+
+  const sampleY = y + 0.5;
+  const intersections = [];
+
+  for (const [p0, p1] of edges) {
+    const y0 = p0.y;
+    const y1 = p1.y;
+
+    /*
+      Half-open edge rule:
+        include one endpoint,
+        exclude the other.
+
+      This avoids double-counting vertices where two edges meet.
+    */
+
+    const crosses =
+      (y0 <= sampleY && sampleY < y1) ||
+      (y1 <= sampleY && sampleY < y0);
+
+    if (crosses) {
+      const t = (sampleY - y0) / (y1 - y0);
+      const x = p0.x + t * (p1.x - p0.x);
+      intersections.push(x);
+    }
+  }
+
+  if (intersections.length < 2) {
+    return null;
+  }
+
+  intersections.sort((x1, x2) => x1 - x2);
+
+  const left = intersections[0];
+  const right = intersections[1];
+
+  const startX = Math.max(0, Math.ceil(left - 0.5));
+  const endX = Math.min(FB_WIDTH - 1, Math.floor(right - 0.5));
+
+  if (startX > endX) {
+    return null;
+  }
+
+  return { startX, endX, left, right };
+}
+
+/*
+  One scanline step = either:
+    - discover a new span, or
+    - write one pixel from the current span.
+
+  This makes the algorithm visibly different from the bounding-box method.
+*/
+
+function stepScanlineRasterizer() {
+  if (scanState.done) return;
+
+  if (scanState.degenerate) {
+    scanState.done = true;
+    return;
+  }
+
+  // If no active span, search downward until a scanline with a span is found.
+  if (!scanState.spanActive) {
+    while (scanState.y <= scanState.maxY) {
+      scanState.scanlinesVisited++;
+
+      const span = computeSpanForScanline(scanState.tri, scanState.y);
+
+      if (span) {
+        scanState.spanActive = true;
+        scanState.spanStartX = span.startX;
+        scanState.spanEndX = span.endX;
+        scanState.x = span.startX;
+        scanState.spansGenerated++;
+        scanState.lastSpan = {
+          y: scanState.y,
+          startX: span.startX,
+          endX: span.endX
+        };
+        return;
+      } else {
+        scanState.emptyScanlines++;
+        scanState.y++;
+      }
+    }
+
+    scanState.done = true;
+    return;
+  }
+
+  // Fill one pixel of the current active span.
+  const x = scanState.x;
+  const y = scanState.y;
+
+  putPixel(scanCtx, x, y, "#ff8a4d");
+
+  scanState.pixelsWritten++;
+  scanState.lastPixel = { x, y };
+
+  scanState.x++;
+
+  if (scanState.x > scanState.spanEndX) {
+    scanState.spanActive = false;
+    scanState.y++;
+  }
+}
+
+/*
+  ----------------------------------------------------------------------
+  Highlighting and display
+  ----------------------------------------------------------------------
+
+  Since putting a yellow current-pixel marker overwrites the framebuffer,
+  we redraw the scene from the accumulated rasterizer state each time.
+  The framebuffer is tiny, so this is fine for a browser demo.
+
+  In hardware, you would not do this. You would have actual framebuffer RAM.
+*/
+
+function replayEdgePixels() {
+  const saved = edgeState;
+  const replay = makeEdgeState(triangle);
+
+  while (!replay.done) {
+    const [a, b, c] = replay.tri;
+    const x = replay.x;
+    const y = replay.y;
+
+    if (
+      y > saved.y ||
+      (y === saved.y && x >= saved.x && !saved.done)
+    ) {
+      break;
+    }
+
+    const p = { x: x + 0.5, y: y + 0.5 };
+
+    const w0 = edgeFunction(b, c, p);
+    const w1 = edgeFunction(c, a, p);
+    const w2 = edgeFunction(a, b, p);
+
+    const inside =
+      (w0 >= 0 && w1 >= 0 && w2 >= 0) ||
+      (w0 <= 0 && w1 <= 0 && w2 <= 0);
+
+    if (inside) {
+      putPixel(edgeCtx, x, y, "#4da3ff");
+    } else {
+      putPixel(edgeCtx, x, y, "rgba(255,80,80,0.28)");
+    }
+
+    replay.x++;
+    if (replay.x > replay.maxX) {
+      replay.x = replay.minX;
+      replay.y++;
+    }
+    if (replay.y > replay.maxY) {
+      replay.done = true;
+    }
+  }
+}
+
+function replayScanlinePixels() {
+  /*
+    Simpler approach: re-simulate the scanline rasterizer for the same number
+    of already-written pixels.
+  */
+
+  const written = scanState.pixelsWritten;
+  const replay = makeScanState(triangle);
+
+  let count = 0;
+
+  while (!replay.done && count < written) {
+    if (!replay.spanActive) {
+      while (replay.y <= replay.maxY) {
+        const span = computeSpanForScanline(replay.tri, replay.y);
+        if (span) {
+          replay.spanActive = true;
+          replay.spanStartX = span.startX;
+          replay.spanEndX = span.endX;
+          replay.x = span.startX;
+          break;
+        } else {
+          replay.y++;
+        }
+      }
+
+      if (replay.y > replay.maxY) {
+        replay.done = true;
+        break;
+      }
+    }
+
+    putPixel(scanCtx, replay.x, replay.y, "#ff8a4d");
+
+    replay.x++;
+    count++;
+
+    if (replay.x > replay.spanEndX) {
+      replay.spanActive = false;
+      replay.y++;
+    }
+  }
+}
+
+function highlightCurrentPixels() {
+  if (!edgeState.done && !edgeState.degenerate) {
+    putPixel(edgeCtx, edgeState.x, edgeState.y, "#ffff66");
+  }
+
+  if (scanState.spanActive && !scanState.done) {
+    putPixel(scanCtx, scanState.x, scanState.y, "#ffff66");
+  } else if (!scanState.done) {
+    // Mark the current scanline being searched.
+    const y = Math.min(scanState.y, FB_HEIGHT - 1);
+    for (let x = 0; x < FB_WIDTH; x++) {
+      putPixel(scanCtx, x, y, "rgba(255,255,102,0.16)");
+    }
+  }
+}
+
+function redrawAll() {
+  renderStaticBackgrounds();
+
+  replayEdgePixels();
+  replayScanlinePixels();
+
+  highlightCurrentPixels();
+
+  drawTriangleOutline(edgeCtx, triangle);
+  drawTriangleOutline(scanCtx, triangle);
+
+  updateStats();
+}
+
+function updateStats() {
+  edgeStats.textContent =
+`state: ${edgeState.done ? "done" : "running"}
+bbox: x ${edgeState.minX}..${edgeState.maxX}, y ${edgeState.minY}..${edgeState.maxY}
+tested pixels:   ${edgeState.tested}
+accepted pixels: ${edgeState.accepted}
+rejected pixels: ${edgeState.rejected}
+next pixel:      ${edgeState.done ? "-" : `(${edgeState.x}, ${edgeState.y})`}`;
+
+  scanStats.textContent =
+`state: ${scanState.done ? "done" : "running"}
+scanline y:      ${scanState.done ? "-" : scanState.y}
+scanlines seen:  ${scanState.scanlinesVisited}
+spans generated: ${scanState.spansGenerated}
+pixels written:  ${scanState.pixelsWritten}
+active span:     ${
+  scanState.spanActive
+    ? `x ${scanState.spanStartX}..${scanState.spanEndX}`
+    : "-"
+}`;
+}
+
+function resetRasterizers() {
+  edgeState = makeEdgeState(triangle);
+  scanState = makeScanState(triangle);
+  redrawAll();
+}
+
+function stepBoth() {
+  stepEdgeRasterizer();
+  stepScanlineRasterizer();
+  redrawAll();
+
+  if (edgeState.done && scanState.done) {
+    stopAuto();
+  }
+}
+
+function toggleAuto() {
+  if (autoTimer) {
+    stopAuto();
+  } else {
+    startAuto();
+  }
+}
+
+function startAuto() {
+  stopAuto();
+
+  autoButton.textContent = "Pause";
+
+  autoTimer = setInterval(() => {
+    stepBoth();
+
+    if (edgeState.done && scanState.done) {
+      stopAuto();
+    }
+  }, Number(speedSlider.value));
+}
+
+function stopAuto() {
+  if (autoTimer) {
+    clearInterval(autoTimer);
+    autoTimer = null;
+  }
+
+  autoButton.textContent = "Auto-run";
+}
+
+function updateSpeedLabel() {
+  speedLabel.textContent = `${speedSlider.value} ms`;
+
+  if (autoTimer) {
+    startAuto();
+  }
+}
+
+function useExampleTriangle() {
+  stopAuto();
+
+  triangle = [
+    { x: 12, y: 10 },
+    { x: 65, y: 18 },
+    { x: 28, y: 50 }
+  ];
+
+  resetRasterizers();
+}
+
+function randomizeTriangle() {
+  stopAuto();
+
+  triangle = [
+    {
+      x: 5 + Math.random() * 70,
+      y: 5 + Math.random() * 50
+    },
+    {
+      x: 5 + Math.random() * 70,
+      y: 5 + Math.random() * 50
+    },
+    {
+      x: 5 + Math.random() * 70,
+      y: 5 + Math.random() * 50
+    }
+  ];
+
+  resetRasterizers();
+}
+
+resetRasterizers();
+</script>
+
+</body>
+</html>    background: #333;
     padding: 2px 4px;
     border-radius: 3px;
   }
