@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Triangle Rasterization Demo</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    background: #202020;
+    color: #eee;
+    margin: 24px;
+  }
+
+  .row {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+  }
+
+  canvas {
+    image-rendering: pixelated;
+    border: 1px solid #777;
+    background: #111;
+  }
+
+  .panel {
+    width: 360px;
+  }
+
+  button {
+    margin-right: 8px;
+    margin-bottom: 12px;
+    padding: 6px 10px;
+  }
+
+  code {
+    background: #333;
+    padding: 2px 4px;
+    border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Triangle Rasterization Demo</h1>
+
+<p>
+  Both canvases draw the same triangle onto a tiny <code>80×60</code> framebuffer,
+  then scale it up. The left canvas uses an edge-function inside test.
+  The right canvas uses scanline span filling.
+</p>
+
+<button onclick="randomizeTriangle()">Random triangle</button>
+<button onclick="useExampleTriangle()">Reset triangle</button>
+
+<div class="row">
+  <div class="panel">
+    <h2>Bounding box + edge functions</h2>
+    <canvas id="edgeCanvas" width="320" height="240"></canvas>
+    <p>
+      This method loops over every pixel in the triangle's bounding box.
+      Each pixel center is tested against the three directed triangle edges.
+    </p>
+  </div>
+
+  <div class="panel">
+    <h2>Scanline / span fill</h2>
+    <canvas id="scanCanvas" width="320" height="240"></canvas>
+    <p>
+      This method processes the triangle row by row. For each scanline,
+      it computes where the triangle intersects that row, then fills the
+      horizontal span between the intersections.
+    </p>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/*
+  We use a tiny logical framebuffer, then scale pixels up.
+
+  This mirrors a simple FPGA/VGA design:
+    - low-resolution framebuffer
+    - integer-ish coordinates
+    - explicit pixel writes
+    - later scanout to display
+*/
+
+const FB_WIDTH = 80;
+const FB_HEIGHT = 60;
+const SCALE = 4;
+
+const edgeCanvas = document.getElementById("edgeCanvas");
+const scanCanvas = document.getElementById("scanCanvas");
+
+const edgeCtx = edgeCanvas.getContext("2d");
+const scanCtx = scanCanvas.getContext("2d");
+
+let triangle = [
+  { x: 12, y: 10 },
+  { x: 65, y: 18 },
+  { x: 28, y: 50 }
+];
+
+function clearCanvas(ctx) {
+  ctx.fillStyle = "#111";
+  ctx.fillRect(0, 0, FB_WIDTH * SCALE, FB_HEIGHT * SCALE);
+}
+
+function putPixel(ctx, x, y, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x * SCALE, y * SCALE, SCALE, SCALE);
+}
+
+function drawGrid(ctx) {
+  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  ctx.lineWidth = 1;
+
+  for (let x = 0; x <= FB_WIDTH; x += 10) {
+    ctx.beginPath();
+    ctx.moveTo(x * SCALE, 0);
+    ctx.lineTo(x * SCALE, FB_HEIGHT * SCALE);
+    ctx.stroke();
+  }
+
+  for (let y = 0; y <= FB_HEIGHT; y += 10) {
+    ctx.beginPath();
+    ctx.moveTo(0, y * SCALE);
+    ctx.lineTo(FB_WIDTH * SCALE, y * SCALE);
+    ctx.stroke();
+  }
+}
+
+function drawTriangleOutline(ctx, tri) {
+  ctx.strokeStyle = "white";
+  ctx.lineWidth = 2;
+
+  ctx.beginPath();
+  ctx.moveTo(tri[0].x * SCALE, tri[0].y * SCALE);
+  ctx.lineTo(tri[1].x * SCALE, tri[1].y * SCALE);
+  ctx.lineTo(tri[2].x * SCALE, tri[2].y * SCALE);
+  ctx.closePath();
+  ctx.stroke();
+
+  for (const p of tri) {
+    ctx.fillStyle = "white";
+    ctx.beginPath();
+    ctx.arc(p.x * SCALE, p.y * SCALE, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/*
+  ----------------------------------------------------------------------
+  Method 1: Bounding box + edge functions
+  ----------------------------------------------------------------------
+
+  An edge function gives a signed area-like value.
+
+  For edge AB and point P:
+
+      edge(A, B, P) = (P.x - A.x)(B.y - A.y)
+                    - (P.y - A.y)(B.x - A.x)
+
+  The sign tells us which side of the directed edge P lies on.
+
+  If P is consistently on the same side of all three edges, P is inside
+  the triangle.
+
+  This is very hardware-friendly:
+    - only add/multiply/subtract
+    - can be made incremental
+    - bounding box limits how many pixels are tested
+*/
+
+function edgeFunction(a, b, p) {
+  return (p.x - a.x) * (b.y - a.y) -
+         (p.y - a.y) * (b.x - a.x);
+}
+
+function rasterizeEdgeFunction(ctx, tri) {
+  const [a, b, c] = tri;
+
+  const minX = Math.max(0, Math.floor(Math.min(a.x, b.x, c.x)));
+  const maxX = Math.min(FB_WIDTH - 1, Math.ceil(Math.max(a.x, b.x, c.x)));
+  const minY = Math.max(0, Math.floor(Math.min(a.y, b.y, c.y)));
+  const maxY = Math.min(FB_HEIGHT - 1, Math.ceil(Math.max(a.y, b.y, c.y)));
+
+  const area = edgeFunction(a, b, c);
+
+  // Degenerate triangle.
+  if (area === 0) return;
+
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      // Test pixel center, not pixel corner.
+      const p = { x: x + 0.5, y: y + 0.5 };
+
+      const w0 = edgeFunction(b, c, p);
+      const w1 = edgeFunction(c, a, p);
+      const w2 = edgeFunction(a, b, p);
+
+      /*
+        If the triangle vertices are clockwise, inside pixels may have all
+        negative edge values. If counterclockwise, they may have all positive
+        values. So accept either all nonnegative or all nonpositive.
+      */
+
+      const inside =
+        (w0 >= 0 && w1 >= 0 && w2 >= 0) ||
+        (w0 <= 0 && w1 <= 0 && w2 <= 0);
+
+      if (inside) {
+        putPixel(ctx, x, y, "#4da3ff");
+      }
+    }
+  }
+}
+
+/*
+  ----------------------------------------------------------------------
+  Method 2: Scanline / span rasterization
+  ----------------------------------------------------------------------
+
+  For each integer y row:
+    1. Intersect that horizontal scanline with the triangle edges.
+    2. Sort the intersection x coordinates.
+    3. Fill from left x to right x.
+
+  This resembles older software/hardware rasterizers because it naturally
+  produces horizontal spans, which are nice for framebuffer writes.
+
+  It is especially attractive when memory likes sequential writes, e.g.
+  SDRAM bursts or framebuffer scanline order.
+*/
+
+function rasterizeScanline(ctx, tri) {
+  const [a, b, c] = tri;
+
+  const minY = Math.max(0, Math.floor(Math.min(a.y, b.y, c.y)));
+  const maxY = Math.min(FB_HEIGHT - 1, Math.ceil(Math.max(a.y, b.y, c.y)));
+
+  const edges = [
+    [a, b],
+    [b, c],
+    [c, a]
+  ];
+
+  for (let y = minY; y <= maxY; y++) {
+    // Again, sample at pixel center.
+    const sampleY = y + 0.5;
+    const intersections = [];
+
+    for (const [p0, p1] of edges) {
+      const y0 = p0.y;
+      const y1 = p1.y;
+
+      /*
+        Check whether this scanline crosses the edge.
+
+        The half-open test avoids double-counting vertices:
+          include lower endpoint,
+          exclude upper endpoint.
+      */
+
+      const crosses =
+        (y0 <= sampleY && sampleY < y1) ||
+        (y1 <= sampleY && sampleY < y0);
+
+      if (crosses) {
+        const t = (sampleY - y0) / (y1 - y0);
+        const x = p0.x + t * (p1.x - p0.x);
+        intersections.push(x);
+      }
+    }
+
+    if (intersections.length < 2) continue;
+
+    intersections.sort((x1, x2) => x1 - x2);
+
+    const left = intersections[0];
+    const right = intersections[1];
+
+    const startX = Math.max(0, Math.ceil(left - 0.5));
+    const endX = Math.min(FB_WIDTH - 1, Math.floor(right - 0.5));
+
+    for (let x = startX; x <= endX; x++) {
+      putPixel(ctx, x, y, "#ff8a4d");
+    }
+  }
+}
+
+function render() {
+  clearCanvas(edgeCtx);
+  clearCanvas(scanCtx);
+
+  drawGrid(edgeCtx);
+  drawGrid(scanCtx);
+
+  rasterizeEdgeFunction(edgeCtx, triangle);
+  rasterizeScanline(scanCtx, triangle);
+
+  drawTriangleOutline(edgeCtx, triangle);
+  drawTriangleOutline(scanCtx, triangle);
+}
+
+function useExampleTriangle() {
+  triangle = [
+    { x: 12, y: 10 },
+    { x: 65, y: 18 },
+    { x: 28, y: 50 }
+  ];
+
+  render();
+}
+
+function randomizeTriangle() {
+  triangle = [
+    {
+      x: 5 + Math.random() * 70,
+      y: 5 + Math.random() * 50
+    },
+    {
+      x: 5 + Math.random() * 70,
+      y: 5 + Math.random() * 50
+    },
+    {
+      x: 5 + Math.random() * 70,
+      y: 5 + Math.random() * 50
+    }
+  ];
+
+  render();
+}
+
+render();
+</script>
+
+</body>
+</html>
